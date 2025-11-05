@@ -1,4 +1,10 @@
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use std::time::Duration;
+
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    time::timeout,
+};
 
 use crate::error::{KafkaError, Result};
 
@@ -107,6 +113,76 @@ impl KafkaConnection {
         }
     }
 
+    /// Read a complete response from Kafka
+    /// Returns the response bytes (without the size header)
+    pub async fn read_response(&mut self) -> Result<Vec<u8>> {
+        self.read_response_with_timeout(Duration::from_secs(30))
+            .await
+    }
+
+    pub async fn read_response_with_timeout(
+        &mut self,
+        timeout_duration: Duration,
+    ) -> Result<Vec<u8>> {
+        if !self.is_connected() {
+            return Err(KafkaError::ConnectionFailed("Not connected".to_string()));
+        }
+
+        let stream = self
+            .stream
+            .as_mut()
+            .ok_or_else(|| KafkaError::ConnectionFailed("Stream is None".to_string()))?;
+
+        // a buffer with 4 bytes header
+        let mut size_buf = [0u8; 4];
+
+        // Read header
+        match timeout(timeout_duration, stream.read_exact(&mut size_buf)).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                self.state = ConnectionState::Failed;
+                return Err(KafkaError::Io(e));
+            }
+            Err(_) => {
+                return Err(KafkaError::ProtocolError("Response timeout".to_string()));
+            }
+        }
+
+        let size = i32::from_be_bytes(size_buf) as usize;
+        println!("[DEBUG] Expecting response of {} bytes", size);
+
+        if size == 0 {
+            return Err(KafkaError::ProtocolError(
+                "Received zero-length response".to_string(),
+            ));
+        }
+
+        if size > 100_000_000 {
+            return Err(KafkaError::ProtocolError(format!(
+                "Response size too large: {} bytes",
+                size
+            )));
+        }
+
+        // Read the complete response body
+        let mut response = vec![0u8; size];
+
+        match timeout(timeout_duration, stream.read_exact(&mut response)).await {
+            Ok(Ok(_)) => {
+                self.bytes_received += 4 + size;
+
+                Ok(response)
+            }
+            Ok(Err(e)) => {
+                self.state = ConnectionState::Failed;
+                Err(KafkaError::Io(e))
+            }
+            Err(_) => Err(KafkaError::ProtocolError(
+                "Response body timeout".to_string(),
+            )),
+        }
+    }
+
     pub async fn disconnect(&mut self) -> Result<()> {
         if let Some(mut stream) = self.stream.take() {
             stream.shutdown().await?;
@@ -206,6 +282,8 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod integration_tests {
+    use tokio::net::TcpListener;
+
     use super::test_helpers::*;
     use super::*;
 
@@ -229,5 +307,34 @@ mod integration_tests {
 
         assert!(conn.disconnect().await.is_ok());
         assert!(!conn.is_connected());
+    }
+
+    #[tokio::test]
+    async fn test_response_timeout() {
+        // connect to a server that doesn't respond
+        // We will mock a server
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+
+        tokio::spawn(async move {
+            let (_socket, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+
+        let mut conn = KafkaConnection::new(addr);
+        conn.connect().await.unwrap();
+
+        conn.send_request(&[0, 0, 0, 1, 42]).await.unwrap();
+
+        let result = conn
+            .read_response_with_timeout(Duration::from_millis(100))
+            .await;
+        assert!(result.is_err());
+        match result {
+            Err(KafkaError::ProtocolError(msg)) => {
+                assert!(msg.contains("timeout"));
+            }
+            _ => panic!("Expected timeout error"),
+        }
     }
 }
