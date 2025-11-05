@@ -6,7 +6,7 @@ pub enum KafkaError {
     ConnectionFailed(String),
     ProtocolError(String),
     InvalidResponse { expected: String, actual: String },
-    DecodedError(String),
+    DecodeError(String),
     InsufficientData { needed: usize, available: usize },
 }
 
@@ -21,7 +21,7 @@ impl fmt::Display for KafkaError {
             KafkaError::InvalidResponse { expected, actual } => {
                 write!(f, "Invalid response: expected {}, got {}", expected, actual)
             }
-            KafkaError::DecodedError(msg) => write!(f, "Decode error: {}", msg),
+            KafkaError::DecodeError(msg) => write!(f, "Decode error: {}", msg),
             KafkaError::InsufficientData { needed, available } => {
                 write!(
                     f,
