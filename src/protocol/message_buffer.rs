@@ -99,6 +99,18 @@ impl MessageBuffer {
         }
     }
 
+    /// Reserve space for message size (always 4 bytes at start)
+    pub fn reserve_size_header(&mut self) {
+        self.data.extend_from_slice(&[0, 0, 0, 0]);
+    }
+
+    /// Fill in the reserved size header with actual message length
+    /// Size does NOT include the 4-byte size field itself
+    pub fn write_size_header(&mut self) {
+        let size = (self.data.len() - 4) as i32;
+        self.data[0..4].copy_from_slice(&size.to_be_bytes());
+    }
+
     pub fn into_bytes(self) -> Vec<u8> {
         self.data
     }
@@ -184,5 +196,46 @@ mod buffer_tests {
                 0x00, 0x00, // empty string
             ]
         );
+    }
+
+    #[test]
+    fn test_nullable_string_encoding() {
+        let mut buf = MessageBuffer::new();
+        buf.put_nullable_string(Some("test"));
+        buf.put_nullable_string(None);
+        assert_eq!(
+            buf.into_bytes(),
+            vec![
+                0x00, 0x04, b't', b'e', b's', b't', // "test"
+                0xFF, 0xFF, // null
+            ]
+        );
+    }
+
+    #[test]
+    fn test_bytes_encoding() {
+        let mut buf = MessageBuffer::new();
+        buf.put_bytes(Some(&[1, 2, 3]));
+        buf.put_bytes(None);
+        assert_eq!(
+            buf.into_bytes(),
+            vec![
+                0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03, 0xFF, 0xFF, 0xFF, 0xFF
+            ]
+        )
+    }
+
+    #[test]
+    fn test_size_header() {
+        let mut buf = MessageBuffer::new();
+        buf.reserve_size_header();
+        buf.put_i32(42); // 4 bytes
+        buf.put_string("test"); // 2 bytes length + 4 bytes content
+        buf.write_size_header();
+
+        let bytes = buf.into_bytes();
+        let size = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+
+        assert_eq!(size, 10);
     }
 }
