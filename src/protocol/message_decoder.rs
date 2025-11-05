@@ -13,7 +13,7 @@ pub struct MessageDecoder<'a> {
 }
 
 impl<'a> MessageDecoder<'a> {
-    fn new(data: &'a [u8]) -> Self {
+    pub fn new(data: &'a [u8]) -> Self {
         Self { data, pos: 0 }
     }
 
