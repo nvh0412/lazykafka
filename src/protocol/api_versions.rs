@@ -34,14 +34,14 @@ impl ApiVersionRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ApiVersion {
     pub api_key: i16,
     pub min_version: i16,
     pub max_version: i16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ApiVersionsResponse {
     pub correlation_id: i32,
     pub error_code: i16,
