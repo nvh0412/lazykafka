@@ -88,7 +88,7 @@ impl KafkaConnection {
         println!("[DEBUG] Sending request of {} bytes", request.len());
 
         print!("[TRACE] Request hex: ");
-        for byte in request.iter().take(32) {
+        for byte in request.iter().take(35) {
             print!("{:02x} ", byte);
         }
 
@@ -170,7 +170,6 @@ impl KafkaConnection {
         match timeout(timeout_duration, stream.read_exact(&mut response)).await {
             Ok(Ok(_)) => {
                 self.bytes_received += 4 + size;
-
                 Ok(response)
             }
             Ok(Err(e)) => {

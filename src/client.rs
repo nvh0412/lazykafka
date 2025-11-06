@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{
     connection::KafkaConnection,
     error::{KafkaError, Result},
-    protocol::api_versions::{ApiVersionRequest, ApiVersionsResponse},
+    protocol::{
+        api_versions::{ApiVersionRequest, ApiVersionsResponse},
+        metadata::{MetadataRequest, MetadataResponse},
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -59,5 +62,35 @@ impl KafkaClient {
 
         self.api_versions = Some(response.clone());
         Ok(response)
+    }
+
+    /// Get cluster metadata
+    pub async fn get_metadata(&mut self, topics: Option<Vec<String>>) -> Result<MetadataResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request = MetadataRequest::new(correlation_id, topics.clone());
+
+        println!("[DEBUG] Requesting metadata for topics: {:?}", topics);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = MetadataResponse::decode(&response_bytes)?;
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// Disconnect gracefully
+    pub async fn disconnect(&mut self) -> Result<()> {
+        self.connection.disconnect().await
     }
 }

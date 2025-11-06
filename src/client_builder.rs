@@ -60,6 +60,7 @@ impl ClientBuilder {
         self
     }
 
+    // NOTE: I think build shouldn't connect the connection, but open for an improvement here
     pub async fn build(self) -> Result<KafkaClient> {
         if self.brokers.is_empty() {
             return Err(KafkaError::ProtocolError(
@@ -77,27 +78,27 @@ impl ClientBuilder {
 
             match tokio::time::timeout(self.config.connection_timeout, connection.connect()).await {
                 Ok(Ok(_)) => {
-                    println!("[INFO] Successfully connected to {}", broker);
-
-                    let mut client = KafkaClient {
+                    let client = KafkaClient {
                         connection,
                         config: self.config.clone(),
                         api_versions: None,
                     };
 
-                    match client.get_api_versions().await {
-                        Ok(res) => {
-                            println!(
-                                "[INFO] Broker support {} API versions",
-                                res.api_versions.len()
-                            );
-                            return Ok(client);
-                        }
-                        Err(e) => {
-                            println!("[WARN] Failed to get API version from {}: {:?}", broker, e);
-                            last_error = Some(e);
-                        }
-                    }
+                    // match client.get_api_versions().await {
+                    //     Ok(res) => {
+                    //         println!(
+                    //             "[INFO] Broker support {} API versions",
+                    //             res.api_versions.len()
+                    //         );
+                    //         return Ok(client);
+                    //     }
+                    //     Err(e) => {
+                    //         println!("[WARN] Failed to get API version from {}: {:?}", broker, e);
+                    //         last_error = Some(e);
+                    //     }
+                    // }
+
+                    return Ok(client);
                 }
                 Ok(Err(e)) => {
                     println!("[WARN] Failed to connect to {}: {:?}", broker, e);

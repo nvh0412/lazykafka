@@ -3,18 +3,45 @@ use std::{
     net::TcpStream,
 };
 
+use kafkatui_rs::client_builder::ClientBuilder;
+
 mod connection;
 mod error;
 mod protocol;
 
-fn main() -> Result<()> {
-    let mut stream = TcpStream::connect("127.0.0.1:9092")?;
-    stream.write(b"Hello Kafka");
+#[tokio::main]
+async fn main() {
+    let mut client = ClientBuilder::new()
+        .brokers(vec!["localhost:9092"])
+        .build()
+        .await
+        .unwrap();
 
-    let mut buffer = [0; 128];
-    stream.read(&mut buffer)?;
+    // let api_versions = client.get_api_versions().await.unwrap();
 
-    Ok(())
+    // for v in api_versions.api_versions.iter() {
+    //     println!(
+    //         "API version: Api Key: {}, Min version {}, Max version {}",
+    //         v.api_key, v.min_version, v.max_version
+    //     )
+    // }
+
+    let metadata = client.get_metadata(None).await.unwrap();
+    for broker in &metadata.brokers {
+        println!(
+            "  Broker {}: {}:{}",
+            broker.node_id, broker.host, broker.port
+        );
+    }
+
+    for topic in &metadata.topics {
+        println!(" Topic {}", topic.topic_name);
+        for p in topic.partitions.iter() {
+            println!("  Partition: {}", p.partition_id);
+        }
+    }
+
+    client.disconnect().await.unwrap();
 }
 
 #[cfg(test)]
