@@ -99,7 +99,6 @@ impl MetadataResponse {
 
         // Read topics
         let topic_count = decoder.read_i32()?;
-        println!("[DEBUG] having {} topics", topic_count);
         let mut topics = Vec::with_capacity(topic_count as usize);
 
         for _ in 0..topic_count {

@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new(kafka_client);
+    app.load_topics();
     let _ = run_app(&mut terminal, &mut app);
 
     disable_raw_mode()?;
@@ -63,6 +64,8 @@ async fn main() -> Result<()> {
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<bool> {
     loop {
         terminal.draw(|f| render(f, app))?;
+
+        app.handle_messages();
 
         if let Event::Key(key) = event::read()? {
             if key.kind == event::KeyEventKind::Release {

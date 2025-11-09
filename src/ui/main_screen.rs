@@ -1,12 +1,14 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    widgets::{Block, Borders, Paragraph},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
 use crate::{app::App, components::stateful_list::StatefulList, models::topic::Topic};
 
-pub fn render(frame: &mut Frame, app: &App) {
+pub fn render(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -42,7 +44,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(stats, header_layout[2]);
 }
 
-fn render_body(frame: &mut Frame, area: Rect, app: &App) {
+fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -51,20 +53,42 @@ fn render_body(frame: &mut Frame, area: Rect, app: &App) {
         ])
         .split(area);
 
-    render_topics_list(frame, body[0], &app.state.topics);
+    render_topics_list(frame, body[0], &mut app.state.topics);
     render_messages_panel(frame, body[1], app);
 }
 
-fn render_topics_list(frame: &mut Frame, area: Rect, topics: &StatefulList<Topic>) {
-    let panel = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(0), // Message list
-        ])
-        .split(area);
+fn render_topics_list(frame: &mut Frame, area: Rect, topics: &mut StatefulList<Topic>) {
+    let items: Vec<ListItem> = topics
+        .items
+        .iter()
+        .map(|topic| {
+            let line = Line::from(vec![
+                Span::raw(&topic.name),
+                Span::styled(
+                    format!(" [{}p]", topic.partitions),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]);
+            ListItem::new(line)
+        })
+        .collect();
 
-    let broker = Paragraph::new("Topic list").block(Block::default().borders(Borders::ALL));
-    frame.render_widget(broker, panel[0]);
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title("Topics")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Gray)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::Blue)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("► ");
+
+    frame.render_stateful_widget(list, area, &mut topics.state);
 }
 
 fn render_messages_panel(frame: &mut Frame, area: Rect, app: &App) {

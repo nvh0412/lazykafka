@@ -42,11 +42,6 @@ impl KafkaConnection {
     }
 
     pub async fn connect(&mut self) -> Result<()> {
-        println!(
-            "[DEBUG] Connecting to Kafka broker: {}",
-            self.broker_address
-        );
-
         match TcpStream::connect(&self.broker_address).await {
             Ok(stream) => {
                 println!("[INFO] Successfully connected to {}", self.broker_address);
@@ -85,25 +80,10 @@ impl KafkaConnection {
             .as_mut()
             .ok_or_else(|| KafkaError::ConnectionFailed("Stream is None".to_string()))?;
 
-        println!("[DEBUG] Sending request of {} bytes", request.len());
-
-        print!("[TRACE] Request hex: ");
-        for byte in request.iter().take(35) {
-            print!("{:02x} ", byte);
-        }
-
-        println!();
-
         match stream.write_all(request).await {
             Ok(_) => {
                 stream.flush().await?;
                 self.bytes_sent += request.len();
-                println!(
-                    "[DEBUG] Sent {} bytes (total: {})",
-                    request.len(),
-                    self.bytes_sent
-                );
-
                 Ok(())
             }
             Err(e) => {
@@ -149,7 +129,6 @@ impl KafkaConnection {
         }
 
         let size = i32::from_be_bytes(size_buf) as usize;
-        println!("[DEBUG] Expecting response of {} bytes", size);
 
         if size == 0 {
             return Err(KafkaError::ProtocolError(

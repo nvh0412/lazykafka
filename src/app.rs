@@ -3,8 +3,12 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 
 use crate::{
-    client::KafkaClient, components::stateful_list::StatefulList, models::topic::Topic,
-    repository::topic_repository::TopicRepository, state::filter::FilterState,
+    client::KafkaClient,
+    components::stateful_list::StatefulList,
+    error::KafkaError,
+    models::topic::Topic,
+    repository::{RepositoryManager, topic_repository::TopicRepository},
+    state::filter::FilterState,
 };
 
 pub enum AppMessage {
@@ -25,7 +29,7 @@ pub struct App {
     pub rx: mpsc::UnboundedReceiver<AppMessage>,
     tx: mpsc::UnboundedSender<AppMessage>,
     pub state: AppState,
-    repository: TopicRepository,
+    repositories: RepositoryManager,
 }
 
 pub struct AppState {
@@ -34,6 +38,7 @@ pub struct AppState {
     pub filter: FilterState,
     // pub broker_stats: BrokerStats,
     pub breadcrumb: Vec<String>,
+    pub error: Option<KafkaError>,
 }
 
 impl Default for AppState {
@@ -42,6 +47,7 @@ impl Default for AppState {
             topics: StatefulList::with_items(vec![]),
             filter: Default::default(),
             breadcrumb: Default::default(),
+            error: None,
         }
     }
 }
@@ -55,13 +61,13 @@ impl App {
             state: AppState::default(),
             rx,
             tx,
-            repository: TopicRepository::new(kafka_client),
+            repositories: RepositoryManager::new(kafka_client),
         }
     }
 
     pub fn load_topics(&self) {
         let tx = self.tx.clone();
-        let repo = self.repository.clone();
+        let repo = self.repositories.topics().clone();
 
         tokio::spawn(async move {
             match repo.fetch_all().await {
@@ -73,5 +79,21 @@ impl App {
                 }
             }
         });
+    }
+
+    pub fn handle_messages(&mut self) {
+        while let Ok(msg) = self.rx.try_recv() {
+            match msg {
+                AppMessage::TopicsLoaded(topics) => {
+                    self.state.topics = StatefulList::with_items(topics);
+                }
+                AppMessage::TopicSelected(name) => {
+                    //self.load_messages_for_topic(name);
+                }
+                AppMessage::Error(err) => {
+                    // self.state.error = Some(err);
+                }
+            }
+        }
     }
 }
