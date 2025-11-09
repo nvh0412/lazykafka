@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
+
 use crate::{
     connection::KafkaConnection,
     error::{KafkaError, Result},
@@ -38,6 +40,18 @@ pub struct KafkaClient {
 
 impl KafkaClient {
     // pub async fn connect(broker: &str) -> Result<Self>;
+    pub fn get_stats(&self) -> BrokerStats {
+        BrokerStats {
+            broker: "localhost:9092".to_string(),
+            status: if self.connection.is_connected() {
+                ConnectionStatus::Connected
+            } else {
+                ConnectionStatus::Disconnected
+            },
+            bytes_sent: self.connection.bytes_sent(),
+            bytes_received: self.connection.bytes_received(),
+        }
+    }
 
     /// Get API versions supported by broker
     pub async fn get_api_versions(&mut self) -> Result<ApiVersionsResponse> {

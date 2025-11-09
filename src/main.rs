@@ -1,6 +1,7 @@
 use std::{
     io::{self, Result},
     sync::Arc,
+    time::Duration,
 };
 
 use ratatui::{
@@ -48,6 +49,8 @@ async fn main() -> Result<()> {
 
     let mut app = App::new(kafka_client);
     app.load_topics();
+    app.start_stats_polling();
+
     let _ = run_app(&mut terminal, &mut app);
 
     disable_raw_mode()?;

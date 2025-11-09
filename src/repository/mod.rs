@@ -7,7 +7,7 @@ use crate::{client::KafkaClient, repository::topic_repository::TopicRepository};
 pub mod topic_repository;
 
 pub struct RepositoryManager {
-    kafka_client: Arc<RwLock<KafkaClient>>,
+    pub kafka_client: Arc<RwLock<KafkaClient>>,
     topic: TopicRepository,
 }
 

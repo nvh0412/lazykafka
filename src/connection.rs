@@ -41,6 +41,14 @@ impl KafkaConnection {
         }
     }
 
+    pub fn bytes_sent(&self) -> usize {
+        self.bytes_sent
+    }
+
+    pub fn bytes_received(&self) -> usize {
+        self.bytes_received
+    }
+
     pub async fn connect(&mut self) -> Result<()> {
         match TcpStream::connect(&self.broker_address).await {
             Ok(stream) => {

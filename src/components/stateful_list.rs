@@ -12,10 +12,34 @@ impl<T> StatefulList<T> {
             state: ListState::default(),
         }
     }
-    pub fn next(&mut self) { /* ... */
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i >= self.items.len() - 1 {
+                    0 // Wrap to beginning
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i)); // ← Using ratatui's select()
     }
-    pub fn previous(&mut self) { /* ... */
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.items.len() - 1 // Wrap to end
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
     }
-    pub fn select(&mut self, index: Option<usize>) { /* ... */
+
+    pub fn selected(&self) -> Option<&T> {
+        self.state.selected().and_then(|i| self.items.get(i))
     }
 }

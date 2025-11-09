@@ -1,19 +1,19 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::{RwLock, mpsc};
 
+use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
+
 use crate::{
-    client::KafkaClient,
-    components::stateful_list::StatefulList,
-    error::KafkaError,
-    models::topic::Topic,
-    repository::{RepositoryManager, topic_repository::TopicRepository},
-    state::filter::FilterState,
+    client::KafkaClient, components::stateful_list::StatefulList, error::KafkaError,
+    models::topic::Topic, repository::RepositoryManager, state::filter::FilterState,
 };
 
 pub enum AppMessage {
     TopicsLoaded(Vec<Topic>),
     TopicSelected(String),
+    StatsUpdated(BrokerStats),
     // MessagesLoaded(Vec<Message>),
     Error(String),
 }
@@ -36,7 +36,7 @@ pub struct AppState {
     pub topics: StatefulList<Topic>,
     // pub messages: StatefulList<Message>,
     pub filter: FilterState,
-    // pub broker_stats: BrokerStats,
+    pub broker_stats: BrokerStats,
     pub breadcrumb: Vec<String>,
     pub error: Option<KafkaError>,
 }
@@ -47,6 +47,12 @@ impl Default for AppState {
             topics: StatefulList::with_items(vec![]),
             filter: Default::default(),
             breadcrumb: Default::default(),
+            broker_stats: BrokerStats {
+                bytes_sent: 0,
+                bytes_received: 0,
+                status: ConnectionStatus::default(),
+                broker: "".to_string(),
+            },
             error: None,
         }
     }
@@ -63,6 +69,22 @@ impl App {
             tx,
             repositories: RepositoryManager::new(kafka_client),
         }
+    }
+
+    pub fn start_stats_polling(&self) {
+        let tx = self.tx.clone();
+        let client = self.repositories.kafka_client.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+
+                // Read lock is fine since get_stats() only reads
+                let stats = client.read().await.get_stats();
+                let _ = tx.send(AppMessage::StatsUpdated(stats));
+            }
+        });
     }
 
     pub fn load_topics(&self) {
@@ -86,9 +108,15 @@ impl App {
             match msg {
                 AppMessage::TopicsLoaded(topics) => {
                     self.state.topics = StatefulList::with_items(topics);
+                    if !self.state.topics.items.is_empty() {
+                        self.state.topics.state.select(Some(0));
+                    }
                 }
                 AppMessage::TopicSelected(name) => {
                     //self.load_messages_for_topic(name);
+                }
+                AppMessage::StatsUpdated(stats) => {
+                    self.state.broker_stats = stats;
                 }
                 AppMessage::Error(err) => {
                     // self.state.error = Some(err);

@@ -6,7 +6,11 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
-use crate::{app::App, components::stateful_list::StatefulList, models::topic::Topic};
+use crate::{
+    app::App,
+    components::stateful_list::StatefulList,
+    models::{broker_stats::ConnectionStatus, topic::Topic},
+};
 
 pub fn render(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
@@ -24,24 +28,58 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 }
 
 fn render_header(frame: &mut Frame, area: Rect, app: &App) {
-    let header_layout = Layout::default()
+    let stats = &app.state.broker_stats;
+    let breadcrumb = &app.state.breadcrumb;
+    let header = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(20), // Broker name
-            Constraint::Percentage(30), // Breadcrumb
-            Constraint::Percentage(50), // Stats
+            Constraint::Length(25),
+            Constraint::Min(20),
+            Constraint::Length(40),
         ])
         .split(area);
 
-    // Render header sections
-    let broker = Paragraph::new("Broker: localhost:9092");
-    frame.render_widget(broker, header_layout[0]);
+    // Broker
+    let broker = Paragraph::new(format!("Broker: {}", stats.broker));
+    frame.render_widget(broker, header[0]);
 
-    let breadcrumb = Paragraph::new("Home > Topics > my-topic");
-    frame.render_widget(breadcrumb, header_layout[1]);
+    // Breadcrumb
+    let breadcrumb_text = breadcrumb.join(" > ");
+    let breadcrumb_widget = Paragraph::new(breadcrumb_text);
+    frame.render_widget(breadcrumb_widget, header[1]);
 
-    let stats = Paragraph::new("Connected | ↓ 1.2MB/s | ↑ 450KB/s");
-    frame.render_widget(stats, header_layout[2]);
+    // Stats
+    let status_icon = match stats.status {
+        ConnectionStatus::Connected => "✓",
+        ConnectionStatus::Connecting => "⋯",
+        ConnectionStatus::Disconnected => "✗",
+        ConnectionStatus::Failed(_) => "⚠",
+    };
+
+    let stats_text = format!(
+        "{} Connected | ↓ {} | ↑ {}",
+        status_icon,
+        format_bytes(stats.bytes_received as u64),
+        format_bytes(stats.bytes_sent as u64)
+    );
+    let stats_widget = Paragraph::new(stats_text);
+    frame.render_widget(stats_widget, header[2]);
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * KB;
+    const GB: u64 = 1024 * MB;
+
+    if bytes >= GB {
+        format!("{:.2}GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.2}MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.2}KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{}B", bytes)
+    }
 }
 
 fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
