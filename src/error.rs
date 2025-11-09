@@ -40,5 +40,4 @@ impl From<io::Error> for KafkaError {
         KafkaError::Io(value)
     }
 }
-
 pub type Result<T> = std::result::Result<T, KafkaError>;

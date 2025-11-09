@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 crossterm = "0.29.0"
 ratatui = "0.29.0"
-tokio = { version = "1.48", features = ["net", "io-util", "rt-multi-thread", "macros", "time"] }
+tokio = { version = "1.48", features = ["net", "io-util", "rt-multi-thread", "macros", "time", "sync"] }
 
 [dev-dependencies]
 tokio-test = "0.4"  # For testing async code
