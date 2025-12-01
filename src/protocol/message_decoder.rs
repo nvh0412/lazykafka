@@ -184,6 +184,7 @@ impl<'a> MessageDecoder<'a> {
 
     pub fn read_bytes(&mut self) -> Result<Option<Vec<u8>>> {
         let len = self.read_i32()?;
+        println!("DEBUG: bytes len{}", len);
         if len < 0 {
             return Ok(None);
         }

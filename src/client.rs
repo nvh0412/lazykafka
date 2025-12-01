@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 
+use crate::protocol::fetch::{FetchRequest, FetchResponse, FetchTopic};
 use crate::{
     connection::KafkaConnection,
     error::{KafkaError, Result},
@@ -83,8 +84,6 @@ impl KafkaClient {
         let correlation_id = self.connection.next_correlation_id();
         let request = MetadataRequest::new(correlation_id, topics.clone());
 
-        println!("[DEBUG] Requesting metadata for topics: {:?}", topics);
-
         self.connection.send_request(&request.encode()).await?;
 
         let response_bytes =
@@ -96,6 +95,30 @@ impl KafkaClient {
         if response.correlation_id != correlation_id {
             return Err(KafkaError::InvalidResponse {
                 expected: format!("correlation_id {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// Fetch messages
+    pub async fn fetch_messages(&mut self, topics: Vec<FetchTopic>) -> Result<FetchResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request = FetchRequest::new(correlation_id, -1, 500, 0, 1_048_576, 0, topics);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = FetchResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
                 actual: format!("correlation_id: {}", response.correlation_id),
             });
         }

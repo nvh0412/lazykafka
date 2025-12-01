@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use protocol::fetch::{FetchPartition, FetchTopic};
 use ratatui::{
     Terminal,
     crossterm::{
@@ -38,28 +39,60 @@ async fn main() -> Result<()> {
         .await
         .unwrap();
 
-    let kafka_client = Arc::new(RwLock::new(client));
+    let topics = vec![FetchTopic {
+        topic: String::from("EmploymentHero.User"),
+        partitions: vec![FetchPartition {
+            partition: 0,
+            fetch_offset: 0,
+            partition_max_bytes: 1_048_576,
+        }],
+    }];
 
-    enable_raw_mode()?;
-    let mut stderr = io::stderr(); // This is a special case. Normally using stdout is fine
-    execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
+    let response = client.fetch_messages(topics).await;
 
-    let backend = CrosstermBackend::new(stderr);
-    let mut terminal = Terminal::new(backend)?;
+    match response {
+        Ok(r) => {
+            println!("Response of fetch:");
+            println!("throttle_time_ms: {}", r.throttle_time_ms);
+            for topic_r in r.responses {
+                println!("Topic: {}", topic_r.topic);
 
-    let mut app = App::new(kafka_client);
-    app.load_topics();
-    app.start_stats_polling();
+                for p in topic_r.paritions {
+                    println!("----- Paritions:");
+                    println!("----- Parition index: {}", p.partition_index);
+                    println!("----- Parition error code: {}", p.error_code);
+                    println!("----- Parition high watermark: {}", p.high_watermark);
+                    println!("----- RECORDS: {:?}", p.records);
+                }
+            }
+        }
+        Err(err) => {
+            println!("error {}", err)
+        }
+    }
 
-    let _ = run_app(&mut terminal, &mut app);
+    // let kafka_client = Arc::new(RwLock::new(client));
 
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+    // enable_raw_mode()?;
+    // let mut stderr = io::stderr(); // This is a special case. Normally using stdout is fine
+    // execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
+
+    // let backend = CrosstermBackend::new(stderr);
+    // let mut terminal = Terminal::new(backend)?;
+
+    // let mut app = App::new(kafka_client);
+    // app.load_topics();
+    // app.start_stats_polling();
+
+    // let _ = run_app(&mut terminal, &mut app);
+
+    // disable_raw_mode()?;
+    // execute!(
+    //     terminal.backend_mut(),
+    //     LeaveAlternateScreen,
+    //     DisableMouseCapture
+    // )?;
+    // terminal.show_cursor()?;
 
     Ok(())
 }
