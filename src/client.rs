@@ -3,7 +3,9 @@ use std::time::Duration;
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 
 use crate::protocol::fetch::{FetchRequest, FetchResponse, FetchTopic};
+use crate::protocol::list_offset::{ListOffsetRequest, ListOffsetResponse, ListOffsetTopic};
 use crate::protocol::offset_fetch::{OffsetFetchRequest, OffsetFetchResponse, OffsetFetchTopic};
+use crate::protocol::{ProtocolRequest, ProtocolResponse};
 use crate::{
     connection::KafkaConnection,
     error::{KafkaError, Result},
@@ -143,6 +145,33 @@ impl KafkaClient {
                 .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
 
         let response = OffsetFetchResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// List Offsets
+    pub async fn list_offsets(
+        &mut self,
+        topics: Vec<ListOffsetTopic>,
+    ) -> Result<ListOffsetResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request = ListOffsetRequest::new(correlation_id, -1, topics);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = ListOffsetResponse::decode(&response_bytes)?;
 
         if response.correlation_id != correlation_id {
             return Err(KafkaError::InvalidResponse {

@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use kafkatui_rs::protocol::list_offset::ListOffsetRequest;
 use protocol::fetch::{FetchPartition, FetchTopic};
 use protocol::offset_fetch::OffsetFetchTopic;
 use ratatui::{
@@ -18,7 +19,9 @@ use ratatui::{
 use tokio::sync::RwLock;
 
 use crate::{
-    app::App, client_builder::ClientBuilder, protocol::offset_fetch::OffsetFetchTopicResponse,
+    app::App,
+    client_builder::ClientBuilder,
+    protocol::list_offset::{ListOffsetPartition, ListOffsetTopic},
     ui::main_screen::render,
 };
 
@@ -43,39 +46,54 @@ async fn main() -> Result<()> {
         .await
         .unwrap();
 
-    let topics = vec![FetchTopic {
-        topic: String::from("EmploymentHero.User"),
-        partitions: vec![FetchPartition {
-            partition: 0,
-            fetch_offset: 0,
-            partition_max_bytes: 1_048_576,
+    // let topics = vec![FetchTopic {
+    //     topic: String::from("EmploymentHero.User"),
+    //     partitions: vec![FetchPartition {
+    //         partition: 0,
+    //         fetch_offset: 2,
+    //         partition_max_bytes: 1_048_576,
+    //     }],
+    // }];
+
+    // let response = client.fetch_messages(topics).await;
+
+    // match response {
+    //     Ok(r) => {
+    //         println!("Response of fetch:");
+    //         for topic_r in r.responses {
+    //             println!("Topic: {}", topic_r.topic);
+
+    //             for p in topic_r.paritions {
+    //                 println!("----- Paritions:");
+    //                 println!("----- Parition index: {}", p.partition_index);
+    //                 println!("----- Parition error code: {}", p.error_code);
+    //                 println!("----- Parition : {:?}", p.records);
+    //             }
+    //         }
+    //     }
+    //     Err(err) => {
+    //         println!("error {}", err)
+    //     }
+    // }
+
+    let topics = vec![ListOffsetTopic {
+        name: String::from("EmploymentHero.User"),
+        partitions: vec![ListOffsetPartition {
+            partition_index: 0,
+            timestamp: 0,
         }],
     }];
 
-    let offset_topics = vec![OffsetFetchTopic {
-        topic: String::from("EmploymentHero.User"),
-        partitions: vec![0],
-    }];
+    let response = client.list_offsets(topics).await.unwrap();
 
-    let response = client.fetch_offsets(offset_topics).await;
+    println!("Response of offset fetch:");
+    for t in response.topics {
+        println!("Topic: {}", t.name);
 
-    match response {
-        Ok(r) => {
-            println!("Response of fetch:");
-            for topic_r in r.topics {
-                println!("Topic: {}", topic_r.topic);
-
-                for p in topic_r.partitions {
-                    println!("----- Paritions:");
-                    println!("----- Parition index: {}", p.partition);
-                    println!("----- Parition error code: {}", p.error_code);
-                    println!("----- Parition commited_offset: {}", p.offset);
-                    println!("----- Parition metadata: {:?}", p.metadata);
-                }
-            }
-        }
-        Err(err) => {
-            println!("error {}", err)
+        for p in t.partitions {
+            println!("Partition index: {}", p.partition_index);
+            println!("Partition offset: {}", p.offset);
+            println!("Partition error code: {}", p.error_code);
         }
     }
 
