@@ -3,4 +3,5 @@ pub mod fetch;
 pub mod message_buffer;
 pub mod message_decoder;
 pub mod metadata;
+pub mod offset_fetch;
 pub mod request_header;

@@ -1,5 +1,3 @@
-use std::io::Bytes;
-
 use crate::{
     error::Result,
     protocol::{

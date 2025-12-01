@@ -5,6 +5,7 @@ use std::{
 };
 
 use protocol::fetch::{FetchPartition, FetchTopic};
+use protocol::offset_fetch::OffsetFetchTopic;
 use ratatui::{
     Terminal,
     crossterm::{
@@ -16,7 +17,10 @@ use ratatui::{
 };
 use tokio::sync::RwLock;
 
-use crate::{app::App, client_builder::ClientBuilder, ui::main_screen::render};
+use crate::{
+    app::App, client_builder::ClientBuilder, protocol::offset_fetch::OffsetFetchTopicResponse,
+    ui::main_screen::render,
+};
 
 mod app;
 mod client;
@@ -48,21 +52,25 @@ async fn main() -> Result<()> {
         }],
     }];
 
-    let response = client.fetch_messages(topics).await;
+    let offset_topics = vec![OffsetFetchTopic {
+        topic: String::from("EmploymentHero.User"),
+        partitions: vec![0],
+    }];
+
+    let response = client.fetch_offsets(offset_topics).await;
 
     match response {
         Ok(r) => {
             println!("Response of fetch:");
-            println!("throttle_time_ms: {}", r.throttle_time_ms);
-            for topic_r in r.responses {
+            for topic_r in r.topics {
                 println!("Topic: {}", topic_r.topic);
 
-                for p in topic_r.paritions {
+                for p in topic_r.partitions {
                     println!("----- Paritions:");
-                    println!("----- Parition index: {}", p.partition_index);
+                    println!("----- Parition index: {}", p.partition);
                     println!("----- Parition error code: {}", p.error_code);
-                    println!("----- Parition high watermark: {}", p.high_watermark);
-                    println!("----- RECORDS: {:?}", p.records);
+                    println!("----- Parition commited_offset: {}", p.offset);
+                    println!("----- Parition metadata: {:?}", p.metadata);
                 }
             }
         }
