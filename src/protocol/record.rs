@@ -20,10 +20,8 @@ pub struct Header {
     pub value: Option<Vec<u8>>,
 }
 
-impl ProtocolResponse<Record> for Record {
-    fn decode(data: &[u8]) -> Result<Self> {
-        let mut decoder = MessageDecoder::new(data);
-
+impl Record {
+    pub fn decode_from_decoder(decoder: &mut MessageDecoder) -> Result<Self> {
         let length = decoder.read_varint()?;
         let attributes = decoder.read_i8()?;
         let timestamp_delta = decoder.read_varint_zigzag()?;
@@ -58,7 +56,7 @@ impl ProtocolResponse<Record> for Record {
 
         // Fix #2 and #3: Decode headers from the current decoder position
         for _ in 0..headers_count {
-            headers.push(Header::decode_from_decoder(&mut decoder)?);
+            headers.push(Header::decode_from_decoder(decoder)?);
         }
 
         Ok(Record {
@@ -71,6 +69,14 @@ impl ProtocolResponse<Record> for Record {
             value,
             headers,
         })
+    }
+}
+
+impl ProtocolResponse<Record> for Record {
+    fn decode(data: &[u8]) -> Result<Self> {
+        let mut decoder = MessageDecoder::new(data);
+
+        Record::decode_from_decoder(&mut decoder)
     }
 }
 
