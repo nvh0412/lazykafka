@@ -17,6 +17,10 @@ impl<'a> MessageDecoder<'a> {
         Self { data, pos: 0 }
     }
 
+    pub fn position(&self) -> usize {
+        self.pos
+    }
+
     /// Check how many bytes remain unread
     pub fn remaining(&self) -> usize {
         self.data.len() - self.pos

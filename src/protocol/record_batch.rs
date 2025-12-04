@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    protocol::{ProtocolResponse, message_decoder::MessageDecoder, record::Record},
+    protocol::{message_decoder::MessageDecoder, record::Record},
 };
 
 pub struct RecordBatch {
@@ -19,28 +19,67 @@ pub struct RecordBatch {
     pub records: Vec<Record>,
 }
 
-impl ProtocolResponse<RecordBatch> for RecordBatch {
-    fn decode(data: &[u8]) -> Result<RecordBatch> {
+impl RecordBatch {
+    pub fn decode(data: &[u8]) -> Result<RecordBatch> {
         let mut decoder = MessageDecoder::new(data);
         let base_offset = decoder.read_i64()?;
         let batch_length = decoder.read_i32()?;
-        let partition_leader_epoch = decoder.read_i32()?;
-        let magic = decoder.read_i8()?;
-        let crc = decoder.read_i32()? as u32;
-        let attributes = decoder.read_i16()?;
-        let last_offset_delta = decoder.read_i32()?;
-        let first_timestamp = decoder.read_i64()?;
-        let max_timestamp = decoder.read_i64()?;
-        let producer_id = decoder.read_i64()?;
-        let producer_epoch = decoder.read_i16()?;
-        let base_sequence = decoder.read_i32()?;
 
-        let record_count = decoder.read_i32()?;
-        // let compression_type = attributes & 0x07;
+        // batch_length covers from partition_leader_epoch onwards
+        // We need to extract only those bytes to avoid reading into next batch
+        let batch_start_pos = decoder.position(); // position after base_offset and batch_length
+        let batch_end_pos = batch_start_pos + batch_length as usize;
+
+        // Create a new decoder limited to this batch's bytes only
+        let batch_data = &data[batch_start_pos..batch_end_pos];
+        let mut batch_decoder = MessageDecoder::new(batch_data);
+
+        let partition_leader_epoch = batch_decoder.read_i32()?;
+        let magic = batch_decoder.read_i8()?;
+        let crc = batch_decoder.read_i32()? as u32;
+        let attributes = batch_decoder.read_i16()?;
+        let last_offset_delta = batch_decoder.read_i32()?;
+        let first_timestamp = batch_decoder.read_i64()?;
+        let max_timestamp = batch_decoder.read_i64()?;
+        let producer_id = batch_decoder.read_i64()?;
+        let producer_epoch = batch_decoder.read_i16()?;
+        let base_sequence = batch_decoder.read_i32()?;
+
+        let record_count = batch_decoder.read_i32()?;
+
+        let compression_type = attributes & 0x07;
+
+        if compression_type != 0 {
+            eprintln!(
+                "[WARNING] Compression detected but not yet supported! Type: {}",
+                compression_type
+            );
+        }
 
         let mut records = Vec::with_capacity(record_count as usize);
-        for _ in 0..record_count {
-            records.push(Record::decode_from_decoder(&mut decoder)?);
+        for i in 0..record_count {
+            // In Kafka batch format v2, each record is prefixed with a varint length
+            // This length tells us how many bytes the record occupies
+            // NOTE: Kafka varints use zigzag encoding even for lengths
+            let record_length = batch_decoder.read_varint_zigzag()?;
+
+            // Extract exactly record_length bytes for this record
+            let record_start = batch_decoder.position();
+            let record_end = record_start + record_length as usize;
+
+            // Create a slice for just this record
+            let record_bytes = &batch_data[record_start..record_end];
+
+            // Decode the record from its isolated bytes
+            // Note: We pass the length we already read, and decode from batch format
+            let mut record_decoder = MessageDecoder::new(record_bytes);
+            let record = Record::decode_from_batch(&mut record_decoder, record_length)?;
+
+            // Advance the batch_decoder past this record's bytes
+            // (Record::decode created its own decoder, so batch_decoder position hasn't moved)
+            let _ = batch_decoder.read_bytes_from_length(record_length)?;
+
+            records.push(record);
         }
 
         Ok(Self {
@@ -83,30 +122,18 @@ mod record_batch_tests {
     fn test_record_batch_decode_minimal_no_records() {
         let data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x3D,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
-            0x02,
-            // crc (i32/u32)
-            0x12, 0x34, 0x56, 0x78,
-            // attributes (i16)
-            0x00, 0x00,
-            // last_offset_delta (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // first_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // max_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // producer_id (i64)
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            // producer_epoch (i16)
-            0xFF, 0xFF,
-            // base_sequence (i32)
-            0xFF, 0xFF, 0xFF, 0xFF,
-            // record_count (i32)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x3D, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
+            0x02, // crc (i32/u32)
+            0x12, 0x34, 0x56, 0x78, // attributes (i16)
+            0x00, 0x00, // last_offset_delta (i32)
+            0x00, 0x00, 0x00, 0x00, // first_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // max_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // producer_id (i64)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // producer_epoch (i16)
+            0xFF, 0xFF, // base_sequence (i32)
+            0xFF, 0xFF, 0xFF, 0xFF, // record_count (i32)
             0x00, 0x00, 0x00, 0x00, // 0 records
         ];
 
@@ -135,28 +162,18 @@ mod record_batch_tests {
             // base_offset (i64)
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, // 100
             // batch_length (i32)
-            0x00, 0x00, 0x00, 0x50,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x01,
-            // magic (i8)
-            0x02,
-            // crc (i32/u32)
-            0xAB, 0xCD, 0xEF, 0x01,
-            // attributes (i16)
+            0x00, 0x00, 0x00, 0x50, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x01, // magic (i8)
+            0x02, // crc (i32/u32)
+            0xAB, 0xCD, 0xEF, 0x01, // attributes (i16)
             0x00, 0x08, // Some compression/transactional flags
             // last_offset_delta (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // first_timestamp (i64)
-            0x00, 0x00, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x00,
-            // max_timestamp (i64)
-            0x00, 0x00, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x01,
-            // producer_id (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A,
-            // producer_epoch (i16)
-            0x00, 0x05,
-            // base_sequence (i32)
-            0x00, 0x00, 0x00, 0x14,
-            // record_count (i32)
+            0x00, 0x00, 0x00, 0x00, // first_timestamp (i64)
+            0x00, 0x00, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x00, // max_timestamp (i64)
+            0x00, 0x00, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x01, // producer_id (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A, // producer_epoch (i16)
+            0x00, 0x05, // base_sequence (i32)
+            0x00, 0x00, 0x00, 0x14, // record_count (i32)
             0x00, 0x00, 0x00, 0x01, // 1 record
         ];
 
@@ -182,30 +199,19 @@ mod record_batch_tests {
     fn test_record_batch_decode_with_multiple_records() {
         let mut data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x50,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
-            0x02,
-            // crc (i32/u32)
-            0x00, 0x00, 0x00, 0x00,
-            // attributes (i16)
-            0x00, 0x00,
-            // last_offset_delta (i32)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x50, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
+            0x02, // crc (i32/u32)
+            0x00, 0x00, 0x00, 0x00, // attributes (i16)
+            0x00, 0x00, // last_offset_delta (i32)
             0x00, 0x00, 0x00, 0x02, // 2 records (0-indexed)
             // first_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // max_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // producer_id (i64)
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            // producer_epoch (i16)
-            0xFF, 0xFF,
-            // base_sequence (i32)
-            0xFF, 0xFF, 0xFF, 0xFF,
-            // record_count (i32)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // max_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // producer_id (i64)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // producer_epoch (i16)
+            0xFF, 0xFF, // base_sequence (i32)
+            0xFF, 0xFF, 0xFF, 0xFF, // record_count (i32)
             0x00, 0x00, 0x00, 0x03, // 3 records
         ];
 
@@ -233,30 +239,18 @@ mod record_batch_tests {
         // when cast to usize, leading to a panic
         let data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x3D,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
-            0x02,
-            // crc (i32/u32)
-            0x00, 0x00, 0x00, 0x00,
-            // attributes (i16)
-            0x00, 0x00,
-            // last_offset_delta (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // first_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // max_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // producer_id (i64)
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            // producer_epoch (i16)
-            0xFF, 0xFF,
-            // base_sequence (i32)
-            0xFF, 0xFF, 0xFF, 0xFF,
-            // record_count (i32) - negative value
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x3D, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
+            0x02, // crc (i32/u32)
+            0x00, 0x00, 0x00, 0x00, // attributes (i16)
+            0x00, 0x00, // last_offset_delta (i32)
+            0x00, 0x00, 0x00, 0x00, // first_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // max_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // producer_id (i64)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // producer_epoch (i16)
+            0xFF, 0xFF, // base_sequence (i32)
+            0xFF, 0xFF, 0xFF, 0xFF, // record_count (i32) - negative value
             0xFF, 0xFF, 0xFF, 0xFF, // -1
         ];
 
@@ -269,30 +263,18 @@ mod record_batch_tests {
         // Test for Issue #1 - excessive record_count
         let data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x3D,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
-            0x02,
-            // crc (i32/u32)
-            0x00, 0x00, 0x00, 0x00,
-            // attributes (i16)
-            0x00, 0x00,
-            // last_offset_delta (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // first_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // max_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // producer_id (i64)
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            // producer_epoch (i16)
-            0xFF, 0xFF,
-            // base_sequence (i32)
-            0xFF, 0xFF, 0xFF, 0xFF,
-            // record_count (i32) - very large value
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x3D, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
+            0x02, // crc (i32/u32)
+            0x00, 0x00, 0x00, 0x00, // attributes (i16)
+            0x00, 0x00, // last_offset_delta (i32)
+            0x00, 0x00, 0x00, 0x00, // first_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // max_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // producer_id (i64)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // producer_epoch (i16)
+            0xFF, 0xFF, // base_sequence (i32)
+            0xFF, 0xFF, 0xFF, 0xFF, // record_count (i32) - very large value
             0x00, 0x0F, 0x42, 0x40, // 1,000,000
         ];
 
@@ -306,30 +288,19 @@ mod record_batch_tests {
         // Test different magic byte values
         let data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x3D,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x3D, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
             0x01, // Magic byte 1 (old format)
             // crc (i32/u32)
-            0x00, 0x00, 0x00, 0x00,
-            // attributes (i16)
-            0x00, 0x00,
-            // last_offset_delta (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // first_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // max_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // producer_id (i64)
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            // producer_epoch (i16)
-            0xFF, 0xFF,
-            // base_sequence (i32)
-            0xFF, 0xFF, 0xFF, 0xFF,
-            // record_count (i32)
+            0x00, 0x00, 0x00, 0x00, // attributes (i16)
+            0x00, 0x00, // last_offset_delta (i32)
+            0x00, 0x00, 0x00, 0x00, // first_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // max_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // producer_id (i64)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // producer_epoch (i16)
+            0xFF, 0xFF, // base_sequence (i32)
+            0xFF, 0xFF, 0xFF, 0xFF, // record_count (i32)
             0x00, 0x00, 0x00, 0x00,
         ];
 
@@ -345,30 +316,18 @@ mod record_batch_tests {
         // Test attributes with compression flags
         let data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x3D,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
-            0x02,
-            // crc (i32/u32)
-            0x00, 0x00, 0x00, 0x00,
-            // attributes (i16) - compression type 1 (gzip)
-            0x00, 0x01,
-            // last_offset_delta (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // first_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // max_timestamp (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // producer_id (i64)
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            // producer_epoch (i16)
-            0xFF, 0xFF,
-            // base_sequence (i32)
-            0xFF, 0xFF, 0xFF, 0xFF,
-            // record_count (i32)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x3D, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
+            0x02, // crc (i32/u32)
+            0x00, 0x00, 0x00, 0x00, // attributes (i16) - compression type 1 (gzip)
+            0x00, 0x01, // last_offset_delta (i32)
+            0x00, 0x00, 0x00, 0x00, // first_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // max_timestamp (i64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // producer_id (i64)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // producer_epoch (i16)
+            0xFF, 0xFF, // base_sequence (i32)
+            0xFF, 0xFF, 0xFF, 0xFF, // record_count (i32)
             0x00, 0x00, 0x00, 0x00,
         ];
 
@@ -383,34 +342,22 @@ mod record_batch_tests {
 
     #[test]
     fn test_record_batch_decode_timestamps() {
-        // Test with timestamp values
-        let timestamp: i64 = 1000000000000; // 1000000000000 = 0xE8D4A51000
+        // Test with realistic timestamp values
+        let timestamp: i64 = 1609459200000; // 2021-01-01 00:00:00 UTC
         let data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x3D,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
-            0x02,
-            // crc (i32/u32)
-            0x00, 0x00, 0x00, 0x00,
-            // attributes (i16)
-            0x00, 0x00,
-            // last_offset_delta (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // first_timestamp (i64) - 0x000000E8D4A51000
-            0x00, 0x00, 0x00, 0xE8, 0xD4, 0xA5, 0x10, 0x00,
-            // max_timestamp (i64) - same
-            0x00, 0x00, 0x00, 0xE8, 0xD4, 0xA5, 0x10, 0x00,
-            // producer_id (i64)
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            // producer_epoch (i16)
-            0xFF, 0xFF,
-            // base_sequence (i32)
-            0xFF, 0xFF, 0xFF, 0xFF,
-            // record_count (i32)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x3D, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
+            0x02, // crc (i32/u32)
+            0x00, 0x00, 0x00, 0x00, // attributes (i16)
+            0x00, 0x00, // last_offset_delta (i32)
+            0x00, 0x00, 0x00, 0x00, // first_timestamp (i64) - 1609459200000
+            0x00, 0x00, 0x01, 0x76, 0xD7, 0xD6, 0xE8, 0x00, // max_timestamp (i64) - same
+            0x00, 0x00, 0x01, 0x76, 0xD7, 0xD6, 0xE8, 0x00, // producer_id (i64)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // producer_epoch (i16)
+            0xFF, 0xFF, // base_sequence (i32)
+            0xFF, 0xFF, 0xFF, 0xFF, // record_count (i32)
             0x00, 0x00, 0x00, 0x00,
         ];
 
@@ -426,12 +373,9 @@ mod record_batch_tests {
         // Incomplete record batch data
         let data = vec![
             // base_offset (i64)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // batch_length (i32)
-            0x00, 0x00, 0x00, 0x3D,
-            // partition_leader_epoch (i32)
-            0x00, 0x00, 0x00, 0x00,
-            // magic (i8)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // batch_length (i32)
+            0x00, 0x00, 0x00, 0x3D, // partition_leader_epoch (i32)
+            0x00, 0x00, 0x00, 0x00, // magic (i8)
             0x02,
             // Missing rest of fields
         ];
@@ -466,10 +410,10 @@ mod record_batch_tests {
             0x00, // timestamp_delta (varint zigzag: 0)
             0x00, // offset_delta (varint: 0)
             // key
-            0x03,             // key_length (varint: 3)
+            0x03, // key_length (varint: 3)
             b'k', b'e', b'y', // key: "key"
             // value
-            0x05,                         // value_length (varint: 5)
+            0x05, // value_length (varint: 5)
             b'v', b'a', b'l', b'u', b'e', // value: "value"
             0x00, // headers_count (varint: 0)
         ]);
@@ -482,4 +426,3 @@ mod record_batch_tests {
         assert_eq!(batch.records[0].value, b"value".to_vec());
     }
 }
-

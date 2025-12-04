@@ -1,7 +1,7 @@
 use crate::{
     error::Result,
     protocol::{
-        message_buffer::MessageBuffer, message_decoder::MessageDecoder,
+        message_buffer::MessageBuffer, message_decoder::MessageDecoder, record_batch::RecordBatch,
         request_header::RequestHeader,
     },
 };
@@ -104,7 +104,7 @@ pub struct FetchPartitionResponse {
     pub high_watermark: i64,
     pub last_stable_offset: i64,
     pub aborted_transactions: Vec<AbortedTransaction>,
-    pub records: Option<Vec<u8>>,
+    pub records: Vec<RecordBatch>,
 }
 
 pub struct AbortedTransaction {
@@ -156,7 +156,43 @@ impl FetchResponse {
                     aborted_transactions = vec![];
                 }
 
-                let records = decoder.read_bytes()?;
+                // Decode all RecordBatches from the records bytes
+                let records_bytes = decoder.read_bytes()?.unwrap_or(vec![]);
+                let mut record_batches = Vec::new();
+
+                if !records_bytes.is_empty() {
+                    let mut batch_decoder = MessageDecoder::new(&records_bytes);
+
+                    // Keep decoding batches until we've consumed all the bytes
+                    while batch_decoder.remaining() > 0 {
+                        // Each batch starts with base_offset (8 bytes) + batch_length (4 bytes)
+                        // We need at least 12 bytes to read these fields
+                        if batch_decoder.remaining() < 12 {
+                            break; // Not enough data for another batch
+                        }
+
+                        let start_pos = batch_decoder.position();
+
+                        // Try to decode a batch
+                        let remaining_data = &records_bytes[start_pos..];
+                        match RecordBatch::decode(remaining_data) {
+                            Ok(batch) => {
+                                // Calculate how many bytes this batch consumed
+                                // batch_length + 8 (base_offset) + 4 (batch_length itself)
+                                let consumed = 12 + batch.batch_length as usize;
+
+                                // Advance the decoder position
+                                let _ = batch_decoder.read_bytes_from_length(consumed as i64);
+
+                                record_batches.push(batch);
+                            }
+                            Err(_) => {
+                                // If we can't decode a batch, stop trying
+                                break;
+                            }
+                        }
+                    }
+                }
 
                 paritions.push(FetchPartitionResponse {
                     partition_index,
@@ -164,7 +200,7 @@ impl FetchResponse {
                     high_watermark,
                     last_stable_offset,
                     aborted_transactions,
-                    records,
+                    records: record_batches,
                 })
             }
 

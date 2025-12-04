@@ -21,20 +21,36 @@ pub struct Header {
 }
 
 impl Record {
-    pub fn decode_from_decoder(decoder: &mut MessageDecoder) -> Result<Self> {
-        let length = decoder.read_varint()?;
+    /// Decode record from batch format (length already read as prefix)
+    /// In Kafka Record Batch Format v2, records use zigzag encoding for lengths
+    pub fn decode_from_batch(decoder: &mut MessageDecoder, length: i64) -> Result<Self> {
         let attributes = decoder.read_i8()?;
+
+        // timestamp_delta uses signed varint (zigzag encoding)
         let timestamp_delta = decoder.read_varint_zigzag()?;
+
+        // offset_delta uses unsigned varint
         let offset_delta = decoder.read_varint()?;
 
-        let key_length = decoder.read_varint()?;
-        let key = decoder.read_bytes_from_length(key_length)?;
-        let value_length = decoder.read_varint()?;
-        let value: Vec<u8> = decoder
-            .read_bytes_from_length(value_length)?
-            .unwrap_or(vec![]);
+        // In batch format v2, key_length uses signed varint (zigzag)
+        // Negative value means null
+        let key_length = decoder.read_varint_zigzag()?;
+        let key = if key_length < 0 {
+            None
+        } else {
+            decoder.read_bytes_from_length(key_length)?
+        };
 
-        let headers_count = decoder.read_varint()?;
+        // value_length also uses signed varint (zigzag)
+        let value_length = decoder.read_varint_zigzag()?;
+        let value: Vec<u8> = if value_length < 0 {
+            vec![]
+        } else {
+            decoder.read_bytes_from_length(value_length)?.unwrap_or(vec![])
+        };
+
+        // headers_count uses signed varint (zigzag)
+        let headers_count = decoder.read_varint_zigzag()?;
 
         if headers_count < 0 {
             return Err(KafkaError::DecodeError(format!(
@@ -53,10 +69,8 @@ impl Record {
         }
 
         let mut headers = Vec::with_capacity(headers_count as usize);
-
-        // Fix #2 and #3: Decode headers from the current decoder position
         for _ in 0..headers_count {
-            headers.push(Header::decode_from_decoder(decoder)?);
+            headers.push(Header::decode_from_batch(decoder)?);
         }
 
         Ok(Record {
@@ -70,6 +84,13 @@ impl Record {
             headers,
         })
     }
+
+    /// Decode record in standalone format (with length field prefix)
+    /// This is used for testing and standalone record parsing
+    pub fn decode_from_decoder(decoder: &mut MessageDecoder) -> Result<Self> {
+        let length = decoder.read_varint()?;
+        Self::decode_from_batch(decoder, length)
+    }
 }
 
 impl ProtocolResponse<Record> for Record {
@@ -81,7 +102,33 @@ impl ProtocolResponse<Record> for Record {
 }
 
 impl Header {
-    // Fix #2 and #3: Decode from existing decoder to maintain position
+    /// Decode header from batch format using zigzag encoding
+    fn decode_from_batch(decoder: &mut MessageDecoder) -> Result<Header> {
+        // Header key_length uses signed varint (zigzag encoding)
+        let header_key_length = decoder.read_varint_zigzag()?;
+        let key = if header_key_length < 0 {
+            String::new()
+        } else {
+            String::from_utf8(
+                decoder
+                    .read_bytes_from_length(header_key_length)?
+                    .unwrap_or(vec![]),
+            )
+            .map_err(|_| KafkaError::DecodeError(String::from("Invalid key header")))?
+        };
+
+        // Header value_length uses signed varint (zigzag encoding)
+        let header_value_length = decoder.read_varint_zigzag()?;
+        let value = if header_value_length < 0 {
+            None
+        } else {
+            decoder.read_bytes_from_length(header_value_length)?
+        };
+
+        Ok(Header { key, value })
+    }
+
+    /// Decode header in standalone format (for testing)
     fn decode_from_decoder(decoder: &mut MessageDecoder) -> Result<Header> {
         let header_key_length = decoder.read_varint()?;
         let key = String::from_utf8(
@@ -189,15 +236,15 @@ mod record_tests {
 
     #[test]
     fn test_record_decode_minimal() {
-        // Minimal record with no key, no value, no headers
+        // Minimal record with null key, empty value, no headers (batch format with zigzag)
         let data = vec![
             0x10, // length (varint: 16)
             0x00, // attributes (i8: 0)
-            0x00, // timestamp_delta (varint zigzag: 0)
+            0x00, // timestamp_delta (zigzag varint: 0)
             0x00, // offset_delta (varint: 0)
-            0x00, // key_length (varint: 0 = empty)
-            0x00, // value_length (varint: 0 = empty)
-            0x00, // headers_count (varint: 0)
+            0x01, // key_length (zigzag varint: 1 = -1, meaning null)
+            0x01, // value_length (zigzag varint: 1 = -1, meaning null/empty)
+            0x00, // headers_count (zigzag varint: 0)
         ];
 
         let result = Record::decode(&data);
@@ -207,25 +254,27 @@ mod record_tests {
         assert_eq!(record.attributes, 0);
         assert_eq!(record.timestamp_delta, 0);
         assert_eq!(record.offset_delta, 0);
-        assert_eq!(record.key, Some(vec![]));
-        assert_eq!(record.value, vec![]);
+        assert_eq!(record.key, None);  // null key
+        assert_eq!(record.value, vec![]);  // null value becomes empty vec
         assert_eq!(record.headers.len(), 0);
     }
 
     #[test]
     fn test_record_decode_with_key_and_value() {
+        // Batch format with zigzag encoding for lengths
+        // Zigzag: 0->0, 1->-1, 2->1, 4->2, 6->3, 8->4, 10->5
         let data = vec![
             0x20, // length (varint: 32)
             0x00, // attributes
-            0x00, // timestamp_delta (varint zigzag: 0)
+            0x00, // timestamp_delta (zigzag varint: 0)
             0x00, // offset_delta (varint: 0)
             // key
-            0x04, // key_length (varint: 4)
+            0x08, // key_length (zigzag varint: 8 = 4 bytes)
             b'k', b'e', b'y', b's', // key: "keys"
             // value
-            0x05, // value_length (varint: 5)
+            0x0A, // value_length (zigzag varint: 10 = 5 bytes)
             b'v', b'a', b'l', b'u', b'e', // value: "value"
-            0x00, // headers_count (varint: 0)
+            0x00, // headers_count (zigzag varint: 0)
         ];
 
         let result = Record::decode(&data);
@@ -238,25 +287,25 @@ mod record_tests {
 
     #[test]
     fn test_record_decode_with_headers() {
-        // Record with 2 headers - this tests the FIX for issues #2 and #3
+        // Record with 2 headers using batch format (zigzag encoding)
         let data = vec![
             0x30, // length (varint: 48)
             0x00, // attributes
-            0x00, // timestamp_delta (varint zigzag: 0)
+            0x00, // timestamp_delta (zigzag varint: 0)
             0x00, // offset_delta (varint: 0)
-            0x00, // key_length (varint: 0 = empty)
-            0x02, // value_length (varint: 2)
+            0x01, // key_length (zigzag varint: 1 = -1, null)
+            0x04, // value_length (zigzag varint: 4 = 2 bytes)
             0x01, 0x02, // value: [1, 2]
-            0x02, // headers_count (varint: 2) - TWO headers
+            0x04, // headers_count (zigzag varint: 4 = 2 headers)
             // First header
-            0x02, // header key length (varint: 2)
+            0x04, // header key length (zigzag varint: 4 = 2 bytes)
             b'k', b'1', // header key: "k1"
-            0x02, // header value length (varint: 2)
+            0x04, // header value length (zigzag varint: 4 = 2 bytes)
             0x0A, 0x0B, // header value: [10, 11]
             // Second header
-            0x02, // header key length (varint: 2)
+            0x04, // header key length (zigzag varint: 4 = 2 bytes)
             b'k', b'2', // header key: "k2"
-            0x02, // header value length (varint: 2)
+            0x04, // header value length (zigzag varint: 4 = 2 bytes)
             0x0C, 0x0D, // header value: [12, 13]
         ];
 
@@ -273,16 +322,15 @@ mod record_tests {
     #[test]
     fn test_record_decode_negative_headers_count() {
         // Test FIX for issue #4 - negative headers count validation
-        // Using actual negative varint encoding
+        // Using zigzag encoding: -1 encodes to 1
         let data = vec![
             0x10, // length
             0x00, // attributes
-            0x00, // timestamp_delta
+            0x00, // timestamp_delta (zigzag: 0)
             0x00, // offset_delta
-            0x00, // key_length
-            0x00, // value_length
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0x01, // headers_count (varint: -1)
+            0x01, // key_length (zigzag: 1 = -1, null)
+            0x01, // value_length (zigzag: 1 = -1, null)
+            0x01, // headers_count (zigzag: 1 = -1, invalid!)
         ];
 
         let result = Record::decode(&data);
@@ -292,7 +340,7 @@ mod record_tests {
             Err(KafkaError::DecodeError(msg)) => {
                 assert!(msg.contains("Invalid headers count"));
             }
-            _ => {}
+            _ => panic!("Expected DecodeError for negative headers count"),
         }
     }
 
@@ -302,11 +350,11 @@ mod record_tests {
         let data = vec![
             0x10, // length
             0x00, // attributes
-            0x01, // timestamp_delta (varint zigzag: 1 decodes to -1)
+            0x01, // timestamp_delta (zigzag varint: 1 = -1)
             0x00, // offset_delta
-            0x00, // key_length
-            0x00, // value_length
-            0x00, // headers_count
+            0x01, // key_length (zigzag: 1 = -1, null)
+            0x01, // value_length (zigzag: 1 = -1, null)
+            0x00, // headers_count (zigzag: 0)
         ];
 
         let result = Record::decode(&data);
@@ -321,11 +369,11 @@ mod record_tests {
         let data = vec![
             0x10, // length
             0xFF, // attributes (i8: -1)
-            0x00, // timestamp_delta
+            0x00, // timestamp_delta (zigzag: 0)
             0x00, // offset_delta
-            0x00, // key_length
-            0x00, // value_length
-            0x00, // headers_count
+            0x01, // key_length (zigzag: 1 = -1, null)
+            0x01, // value_length (zigzag: 1 = -1, null)
+            0x00, // headers_count (zigzag: 0)
         ];
 
         let result = Record::decode(&data);
@@ -340,11 +388,11 @@ mod record_tests {
         let data = vec![
             0x80, 0x01, // length (varint: 128)
             0x00, // attributes
-            0x00, // timestamp_delta
+            0x00, // timestamp_delta (zigzag: 0)
             0x80, 0x02, // offset_delta (varint: 256)
-            0x00, // key_length
-            0x00, // value_length
-            0x00, // headers_count
+            0x01, // key_length (zigzag: 1 = -1, null)
+            0x01, // value_length (zigzag: 1 = -1, null)
+            0x00, // headers_count (zigzag: 0)
         ];
 
         let result = Record::decode(&data);
@@ -398,33 +446,33 @@ mod record_tests {
 
     #[test]
     fn test_record_with_multiple_headers_and_values() {
-        // Comprehensive test with key, value, and multiple headers
+        // Comprehensive test with key, value, and multiple headers using batch format (zigzag)
         let data = vec![
             0x50, // length
             0x08, // attributes (some flags set)
-            0x04, // timestamp_delta (zigzag: 4 decodes to 2)
+            0x04, // timestamp_delta (zigzag: 4 = 2)
             0x05, // offset_delta (varint: 5)
             // key
-            0x03, // key_length
+            0x06, // key_length (zigzag: 6 = 3 bytes)
             b'm', b's', b'g', // key: "msg"
             // value
-            0x07, // value_length
+            0x0E, // value_length (zigzag: 14 = 7 bytes)
             b'p', b'a', b'y', b'l', b'o', b'a', b'd', // value: "payload"
-            0x03, // headers_count: 3
+            0x06, // headers_count (zigzag: 6 = 3 headers)
             // Header 1
-            0x04, // key length
+            0x08, // key length (zigzag: 8 = 4 bytes)
             b't', b'y', b'p', b'e', // "type"
-            0x04, // value length
+            0x08, // value length (zigzag: 8 = 4 bytes)
             b'j', b's', b'o', b'n', // "json"
             // Header 2
-            0x04, // key length
+            0x08, // key length (zigzag: 8 = 4 bytes)
             b'u', b's', b'e', b'r', // "user"
-            0x05, // value length
+            0x0A, // value length (zigzag: 10 = 5 bytes)
             b'a', b'l', b'i', b'c', b'e', // "alice"
             // Header 3
-            0x02, // key length
+            0x04, // key length (zigzag: 4 = 2 bytes)
             b'i', b'd', // "id"
-            0x03, // value length
+            0x06, // value length (zigzag: 6 = 3 bytes)
             b'1', b'2', b'3', // "123"
         ];
 
