@@ -136,6 +136,37 @@ impl<'a> MessageDecoder<'a> {
         }
     }
 
+    pub fn read_varint(&mut self) -> Result<i64> {
+        let mut value: i64 = 0;
+        let mut shift = 0;
+
+        loop {
+            if self.remaining() < 1 {
+                return Err(KafkaError::DecodeError("Incomplete varint".to_string()));
+            }
+
+            let byte = self.data[self.pos];
+            self.pos += 1;
+
+            value |= ((byte & 0x7F) as i64) << shift;
+
+            if (byte & 0x80) == 0 {
+                return Ok(value);
+            }
+
+            shift += 7;
+            if shift >= 64 {
+                return Err(KafkaError::DecodeError("Varint too long".to_string()));
+            }
+        }
+    }
+
+    pub fn read_varint_zigzag(&mut self) -> Result<i64> {
+        let unsigned = self.read_varint()?;
+        // Zigzag decode: (n >> 1) ^ -(n & 1)
+        Ok((unsigned >> 1) as i64 ^ -((unsigned & 1) as i64))
+    }
+
     pub fn read_string(&mut self) -> Result<String> {
         let len = self.read_i16()?;
 
@@ -182,9 +213,26 @@ impl<'a> MessageDecoder<'a> {
         Ok(Some(s))
     }
 
+    pub fn read_bytes_from_length(&mut self, length: i64) -> Result<Option<Vec<u8>>> {
+        if length < 0 {
+            return Ok(None);
+        }
+
+        let len = length as usize;
+        if self.remaining() < len {
+            return Err(KafkaError::InsufficientData {
+                needed: len,
+                available: self.remaining(),
+            });
+        }
+
+        let bytes = self.data[self.pos..self.pos + len].to_vec();
+        self.pos += len;
+        Ok(Some(bytes))
+    }
+
     pub fn read_bytes(&mut self) -> Result<Option<Vec<u8>>> {
         let len = self.read_i32()?;
-        println!("DEBUG: bytes len{}", len);
         if len < 0 {
             return Ok(None);
         }
@@ -306,5 +354,68 @@ mod decoder_tests {
             }
             _ => panic!("Expected DecodeError for invalid UTF-8"),
         }
+    }
+
+    #[test]
+    fn test_read_bytes_from_length_valid() {
+        let data = vec![0x01, 0x02, 0x03, 0x04, 0x05];
+        let mut decoder = MessageDecoder::new(&data);
+
+        // Read 3 bytes
+        let result = decoder.read_bytes_from_length(3).unwrap();
+        assert_eq!(result, Some(vec![0x01, 0x02, 0x03]));
+        assert_eq!(decoder.pos, 3);
+        assert_eq!(decoder.remaining(), 2);
+
+        // Read remaining 2 bytes
+        let result = decoder.read_bytes_from_length(2).unwrap();
+        assert_eq!(result, Some(vec![0x04, 0x05]));
+        assert_eq!(decoder.pos, 5);
+        assert_eq!(decoder.remaining(), 0);
+    }
+
+    #[test]
+    fn test_read_bytes_from_length_null() {
+        let data = vec![0x01, 0x02, 0x03];
+        let mut decoder = MessageDecoder::new(&data);
+
+        // Negative length should return None without consuming data
+        let result = decoder.read_bytes_from_length(-1).unwrap();
+        assert_eq!(result, None);
+        assert_eq!(decoder.pos, 0);
+        assert_eq!(decoder.remaining(), 3);
+    }
+
+    #[test]
+    fn test_read_bytes_from_length_insufficient_data() {
+        let data = vec![0x01, 0x02, 0x03];
+        let mut decoder = MessageDecoder::new(&data);
+
+        // Try to read 5 bytes when only 3 are available
+        match decoder.read_bytes_from_length(5) {
+            Err(KafkaError::InsufficientData { needed, available }) => {
+                assert_eq!(needed, 5);
+                assert_eq!(available, 3);
+            }
+            _ => panic!("Expected InsufficientData error"),
+        }
+
+        // Position should not have advanced
+        assert_eq!(decoder.pos, 0);
+    }
+
+    #[test]
+    fn test_read_bytes_from_length_after_other_reads() {
+        let data = vec![0x00, 0x00, 0x00, 0x2A, 0x01, 0x02, 0x03];
+        let mut decoder = MessageDecoder::new(&data);
+
+        // Read i32 first
+        let num = decoder.read_i32().unwrap();
+        assert_eq!(num, 42);
+
+        // Then read bytes with specific length
+        let result = decoder.read_bytes_from_length(3).unwrap();
+        assert_eq!(result, Some(vec![0x01, 0x02, 0x03]));
+        assert_eq!(decoder.remaining(), 0);
     }
 }
