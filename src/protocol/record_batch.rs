@@ -4,18 +4,18 @@ use crate::{
 };
 
 pub struct RecordBatch {
-    pub base_offset: i64,
-    pub batch_length: i32,
-    pub partition_leader_epoch: i32,
-    pub magic: i8,
-    pub crc: u32,
     pub attributes: i16,
-    pub last_offset_delta: i32,
-    pub first_timestamp: i64,
-    pub max_timestamp: i64,
-    pub producer_id: i64,
-    pub producer_epoch: i16,
+    pub base_offset: i64,
     pub base_sequence: i32,
+    pub batch_length: i32,
+    pub crc: u32,
+    pub first_timestamp: i64,
+    pub last_offset_delta: i32,
+    pub magic: i8,
+    pub max_timestamp: i64,
+    pub partition_leader_epoch: i32,
+    pub producer_epoch: i16,
+    pub producer_id: i64,
     pub records: Vec<Record>,
 }
 
@@ -57,7 +57,7 @@ impl RecordBatch {
         }
 
         let mut records = Vec::with_capacity(record_count as usize);
-        for i in 0..record_count {
+        for _i in 0..record_count {
             // In Kafka batch format v2, each record is prefixed with a varint length
             // This length tells us how many bytes the record occupies
             // NOTE: Kafka varints use zigzag encoding even for lengths

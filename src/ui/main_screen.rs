@@ -130,15 +130,20 @@ fn render_topics_list(frame: &mut Frame, area: Rect, topics: &mut StatefulList<T
 }
 
 fn render_messages_panel(frame: &mut Frame, area: Rect, app: &App) {
-    let panel = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(0), // Message list
-        ])
-        .split(area);
+    let items: Vec<ListItem> = app
+        .state
+        .records
+        .iter()
+        .map(|r| ListItem::new(format!("{}", String::from_utf8(r.value.clone()).unwrap())))
+        .collect();
 
-    let broker = Paragraph::new("Message list").block(Block::default().borders(Borders::ALL));
-    frame.render_widget(broker, panel[0]);
+    let list = List::new(items).block(
+        Block::default()
+            .title("Records")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Gray)),
+    );
+    frame.render_widget(list, area);
 }
 
 fn render_footer(frame: &mut Frame, area: Rect, app: &App) {}

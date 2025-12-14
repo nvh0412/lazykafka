@@ -9,12 +9,14 @@ use crate::{
     client::KafkaClient, components::stateful_list::StatefulList, error::KafkaError,
     models::topic::Topic, repository::RepositoryManager, state::filter::FilterState,
 };
+use crate::protocol::fetch::{FetchPartition, FetchTopic};
+use crate::protocol::record::Record;
 
 pub enum AppMessage {
     TopicsLoaded(Vec<Topic>),
     TopicSelected(String),
     StatsUpdated(BrokerStats),
-    // MessagesLoaded(Vec<Message>),
+    MessagesLoaded(Vec<Record>),
     Error(String),
 }
 
@@ -34,6 +36,7 @@ pub struct App {
 
 pub struct AppState {
     pub topics: StatefulList<Topic>,
+    pub records: Vec<Record>,
     // pub messages: StatefulList<Message>,
     pub filter: FilterState,
     pub broker_stats: BrokerStats,
@@ -45,6 +48,7 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             topics: StatefulList::with_items(vec![]),
+            records: vec![],
             filter: Default::default(),
             breadcrumb: Default::default(),
             broker_stats: BrokerStats {
@@ -68,6 +72,22 @@ impl App {
             rx,
             tx,
             repositories: RepositoryManager::new(kafka_client),
+        }
+    }
+
+    pub fn on_up(&mut self) {
+       self.state.topics.previous()
+    }
+
+    pub fn on_down(&mut self) {
+        self.state.topics.next()
+    }
+
+    pub fn on_enter(&mut self) {
+        let selected_topic = self.state.topics.selected();
+
+        if let Some(topic) = selected_topic {
+            self.select_topic(topic.name.clone());
         }
     }
 
@@ -103,6 +123,50 @@ impl App {
         });
     }
 
+    pub fn select_topic(&self, topic: String) {
+        self.tx.send(AppMessage::TopicSelected(topic)).unwrap();
+    }
+
+    pub fn load_messages_for_topic(&self, topic: String) {
+        let tx = self.tx.clone();
+        let client = self.repositories.kafka_client.clone();
+
+        let topics = vec![FetchTopic {
+            topic,
+            partitions: vec![FetchPartition {
+                partition: 0,
+                fetch_offset: 30,
+                partition_max_bytes: 1_048_576,
+            }],
+        }];
+
+        tokio::spawn(async move {
+            let mut client =  client.write().await;
+                
+            let response = client.fetch_messages(topics).await;
+
+            match response {
+                Ok(r) => {
+                    let mut records = Vec::new();
+                    for topic_r in r.responses {
+                        for p in topic_r.paritions {
+                            for batch in p.records {
+                                for r in batch.records {
+                                    records.push(r);
+                                }
+                            }
+                        }
+                    }
+
+                    let _ = tx.send(AppMessage::MessagesLoaded(records));
+                }
+                Err(err) => {
+                    println!("error {}", err)
+                }
+            }
+        });
+    }
+
     pub fn handle_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
@@ -111,15 +175,20 @@ impl App {
                     if !self.state.topics.items.is_empty() {
                         self.state.topics.state.select(Some(0));
                     }
+
+                    // self.select_topic(String::from("EmploymentHero.User"));
                 }
                 AppMessage::TopicSelected(name) => {
-                    //self.load_messages_for_topic(name);
+                    self.load_messages_for_topic(name);
                 }
                 AppMessage::StatsUpdated(stats) => {
                     self.state.broker_stats = stats;
                 }
                 AppMessage::Error(err) => {
                     // self.state.error = Some(err);
+                }
+                AppMessage::MessagesLoaded(records) => {
+                    self.state.records = records;
                 }
             }
         }

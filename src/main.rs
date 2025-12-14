@@ -16,6 +16,7 @@ use ratatui::{
     },
     prelude::{Backend, CrosstermBackend},
 };
+use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -40,87 +41,41 @@ mod ui;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut client = ClientBuilder::new()
+    let client = ClientBuilder::new()
         .brokers(vec!["localhost:9092"])
         .build()
         .await
         .unwrap();
 
-    // let topics = vec![FetchTopic {
-    //     topic: String::from("EmploymentHero.User"),
-    //     partitions: vec![FetchPartition {
-    //         partition: 0,
-    //         fetch_offset: 2,
-    //         partition_max_bytes: 1_048_576,
-    //     }],
-    // }];
+    let sharable_client = Arc::new(RwLock::new(client));
 
-    // let response = client.fetch_messages(topics).await;
+    enable_raw_mode()?;
+    let mut stderr = io::stderr(); // This is a special case. Normally using stdout is fine
+    execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
 
-    // match response {
-    //     Ok(r) => {
-    //         println!("Response of fetch:");
-    //         for topic_r in r.responses {
-    //             println!("Topic: {}", topic_r.topic);
+    let backend = CrosstermBackend::new(stderr);
+    let mut terminal = Terminal::new(backend)?;
 
-    //             for p in topic_r.paritions {
-    //                 println!("----- Paritions:");
-    //                 println!("----- Parition index: {}", p.partition_index);
-    //                 println!("----- Parition error code: {}", p.error_code);
-    //                 println!("----- Parition : {:?}", p.records);
-    //             }
-    //         }
-    //     }
-    //     Err(err) => {
-    //         println!("error {}", err)
-    //     }
-    // }
+    let mut app = App::new(sharable_client);
+    app.load_topics();
+    app.start_stats_polling();
 
-    let topics = vec![ListOffsetTopic {
-        name: String::from("EmploymentHero.User"),
-        partitions: vec![ListOffsetPartition {
-            partition_index: 0,
-            timestamp: 0,
-        }],
-    }];
+    let _ = run_app(&mut terminal, &mut app);
 
-    let response = client.list_offsets(topics).await.unwrap();
-
-    println!("Response of offset fetch:");
-    for t in response.topics {
-        println!("Topic: {}", t.name);
-
-        for p in t.partitions {
-            println!("Partition index: {}", p.partition_index);
-            println!("Partition offset: {}", p.offset);
-            println!("Partition error code: {}", p.error_code);
-        }
-    }
-
-    // let kafka_client = Arc::new(RwLock::new(client));
-
-    // enable_raw_mode()?;
-    // let mut stderr = io::stderr(); // This is a special case. Normally using stdout is fine
-    // execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
-
-    // let backend = CrosstermBackend::new(stderr);
-    // let mut terminal = Terminal::new(backend)?;
-
-    // let mut app = App::new(kafka_client);
-    // app.load_topics();
-    // app.start_stats_polling();
-
-    // let _ = run_app(&mut terminal, &mut app);
-
-    // disable_raw_mode()?;
-    // execute!(
-    //     terminal.backend_mut(),
-    //     LeaveAlternateScreen,
-    //     DisableMouseCapture
-    // )?;
-    // terminal.show_cursor()?;
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
 
     Ok(())
+}
+
+enum InputMode {
+    Normal,
+    Editing,
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<bool> {
@@ -137,6 +92,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
 
             match key.code {
                 KeyCode::Char('q') => return Ok(false),
+                KeyCode::Up => app.on_up(),
+                KeyCode::Down => app.on_down(),
+                KeyCode::Enter => app.on_enter(),
                 _ => {}
             }
         }
