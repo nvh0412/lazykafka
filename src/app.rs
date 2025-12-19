@@ -5,12 +5,12 @@ use tokio::sync::{RwLock, mpsc};
 
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 
+use crate::protocol::fetch::{FetchPartition, FetchTopic};
+use crate::protocol::record::Record;
 use crate::{
     client::KafkaClient, components::stateful_list::StatefulList, error::KafkaError,
     models::topic::Topic, repository::RepositoryManager, state::filter::FilterState,
 };
-use crate::protocol::fetch::{FetchPartition, FetchTopic};
-use crate::protocol::record::Record;
 
 pub enum AppMessage {
     TopicsLoaded(Vec<Topic>),
@@ -76,7 +76,7 @@ impl App {
     }
 
     pub fn on_up(&mut self) {
-       self.state.topics.previous()
+        self.state.topics.previous()
     }
 
     pub fn on_down(&mut self) {
@@ -129,39 +129,15 @@ impl App {
 
     pub fn load_messages_for_topic(&self, topic: String) {
         let tx = self.tx.clone();
-        let client = self.repositories.kafka_client.clone();
-
-        let topics = vec![FetchTopic {
-            topic,
-            partitions: vec![FetchPartition {
-                partition: 0,
-                fetch_offset: 30,
-                partition_max_bytes: 1_048_576,
-            }],
-        }];
+        let repo = self.repositories.messages().clone();
 
         tokio::spawn(async move {
-            let mut client =  client.write().await;
-                
-            let response = client.fetch_messages(topics).await;
-
-            match response {
-                Ok(r) => {
-                    let mut records = Vec::new();
-                    for topic_r in r.responses {
-                        for p in topic_r.paritions {
-                            for batch in p.records {
-                                for r in batch.records {
-                                    records.push(r);
-                                }
-                            }
-                        }
-                    }
-
+            match repo.fetch_by_topic(topic).await {
+                Ok(records) => {
                     let _ = tx.send(AppMessage::MessagesLoaded(records));
                 }
-                Err(err) => {
-                    println!("error {}", err)
+                Err(e) => {
+                    let _ = tx.send(AppMessage::Error(e.to_string()));
                 }
             }
         });
@@ -175,8 +151,6 @@ impl App {
                     if !self.state.topics.items.is_empty() {
                         self.state.topics.state.select(Some(0));
                     }
-
-                    // self.select_topic(String::from("EmploymentHero.User"));
                 }
                 AppMessage::TopicSelected(name) => {
                     self.load_messages_for_topic(name);

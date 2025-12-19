@@ -21,6 +21,19 @@ pub struct FetchTopic {
     pub partitions: Vec<FetchPartition>,
 }
 
+impl FetchTopic {
+    pub fn new(topic: String) -> Self {
+        Self {
+            topic,
+            partitions: vec![],
+        }
+    }
+
+    pub fn add_partition(&mut self, partition: FetchPartition) {
+        self.partitions.push(partition);
+    }
+}
+
 pub struct FetchPartition {
     pub partition: i32,
     pub fetch_offset: i64,
