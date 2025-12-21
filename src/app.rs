@@ -26,8 +26,14 @@ pub enum Screen {
     TopicDetail(String),
 }
 
+pub enum InputMode {
+    Normal,
+    SearchTopic,
+}
+
 pub struct App {
     pub screen: Screen,
+    pub input_mode: InputMode,
     pub rx: mpsc::UnboundedReceiver<AppMessage>,
     tx: mpsc::UnboundedSender<AppMessage>,
     pub state: AppState,
@@ -36,19 +42,20 @@ pub struct App {
 
 pub struct AppState {
     pub topics: StatefulList<Topic>,
-    pub records: Vec<Record>,
+    pub records: StatefulList<Record>,
     // pub messages: StatefulList<Message>,
     pub filter: FilterState,
     pub broker_stats: BrokerStats,
     pub breadcrumb: Vec<String>,
     pub error: Option<KafkaError>,
+    pub topic_search_query: String,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
             topics: StatefulList::with_items(vec![]),
-            records: vec![],
+            records: StatefulList::with_items(vec![]),
             filter: Default::default(),
             breadcrumb: Default::default(),
             broker_stats: BrokerStats {
@@ -58,6 +65,7 @@ impl Default for AppState {
                 broker: "".to_string(),
             },
             error: None,
+            topic_search_query: String::new(),
         }
     }
 }
@@ -68,6 +76,7 @@ impl App {
 
         Self {
             screen: Screen::Main,
+            input_mode: InputMode::Normal,
             state: AppState::default(),
             rx,
             tx,
@@ -89,6 +98,25 @@ impl App {
         if let Some(topic) = selected_topic {
             self.select_topic(topic.name.clone());
         }
+    }
+
+    pub fn toggle_search_mode(&mut self) {
+        self.input_mode = match self.input_mode {
+            InputMode::Normal => InputMode::SearchTopic,
+            InputMode::SearchTopic => InputMode::Normal,
+        };
+    }
+
+    pub fn on_search_char(&mut self, c: char) {
+        self.state.topic_search_query.push(c);
+    }
+
+    pub fn on_search_backspace(&mut self) {
+        self.state.topic_search_query.pop();
+    }
+
+    pub fn clear_search(&mut self) {
+        self.state.topic_search_query.clear();
     }
 
     pub fn start_stats_polling(&self) {
@@ -162,7 +190,7 @@ impl App {
                     // self.state.error = Some(err);
                 }
                 AppMessage::MessagesLoaded(records) => {
-                    self.state.records = records;
+                    self.state.records = StatefulList::with_items(records);
                 }
             }
         }

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::App,
+    app::{App, InputMode},
     components::stateful_list::StatefulList,
     models::{broker_stats::ConnectionStatus, topic::Topic},
 };
@@ -91,15 +91,68 @@ fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
         ])
         .split(area);
 
-    render_topics_list(frame, body[0], &mut app.state.topics);
+    render_topics_list(
+        frame,
+        body[0],
+        &mut app.state.topics,
+        &app.state.topic_search_query,
+        &app.input_mode,
+    );
     render_messages_panel(frame, body[1], app);
 }
 
-fn render_topics_list(frame: &mut Frame, area: Rect, topics: &mut StatefulList<Topic>) {
-    let items: Vec<ListItem> = topics
+fn render_topics_list(
+    frame: &mut Frame,
+    area: Rect,
+    topics: &mut StatefulList<Topic>,
+    search_query: &str,
+    input_mode: &InputMode,
+) {
+    // Split the area into search box (3 lines) and topic list
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Search box
+            Constraint::Min(0),    // Topic list
+        ])
+        .split(area);
+
+    // Render search box
+    let search_text = if search_query.is_empty() {
+        "Type / to search topics...".to_string()
+    } else {
+        search_query.to_string()
+    };
+
+    let search_style = match input_mode {
+        InputMode::SearchTopic => Style::default().fg(Color::Yellow),
+        InputMode::Normal => Style::default().fg(Color::Gray),
+    };
+
+    let search_box = Paragraph::new(search_text)
+        .block(
+            Block::default()
+                .title("Search")
+                .borders(Borders::ALL)
+                .border_style(search_style),
+        )
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(search_box, chunks[0]);
+
+    // Filter topics based on search query
+    let filtered_items: Vec<ListItem> = topics
         .items
         .iter()
-        .map(|topic| {
+        .enumerate()
+        .filter(|(_, topic)| {
+            if search_query.is_empty() {
+                true
+            } else {
+                topic.name.to_lowercase().contains(&search_query.to_lowercase())
+            }
+        })
+        .map(|(_, topic)| {
             let line = Line::from(vec![
                 Span::raw(&topic.name),
                 Span::styled(
@@ -111,7 +164,7 @@ fn render_topics_list(frame: &mut Frame, area: Rect, topics: &mut StatefulList<T
         })
         .collect();
 
-    let list = List::new(items)
+    let list = List::new(filtered_items)
         .block(
             Block::default()
                 .title("Topics")
@@ -126,13 +179,14 @@ fn render_topics_list(frame: &mut Frame, area: Rect, topics: &mut StatefulList<T
         )
         .highlight_symbol("► ");
 
-    frame.render_stateful_widget(list, area, &mut topics.state);
+    frame.render_stateful_widget(list, chunks[1], &mut topics.state);
 }
 
 fn render_messages_panel(frame: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = app
         .state
         .records
+        .items
         .iter()
         .map(|r| ListItem::new(format!("{}", String::from_utf8(r.value.clone()).unwrap())))
         .collect();

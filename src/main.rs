@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::{
-    app::App,
+    app::{App, InputMode},
     client_builder::ClientBuilder,
     protocol::list_offset::{ListOffsetPartition, ListOffsetTopic},
     ui::main_screen::render,
@@ -73,11 +73,6 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-enum InputMode {
-    Normal,
-    Editing,
-}
-
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<bool> {
     loop {
         terminal.draw(|f| render(f, app))?;
@@ -90,12 +85,25 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                 continue;
             }
 
-            match key.code {
-                KeyCode::Char('q') => return Ok(false),
-                KeyCode::Up => app.on_up(),
-                KeyCode::Down => app.on_down(),
-                KeyCode::Enter => app.on_enter(),
-                _ => {}
+            match app.input_mode {
+                InputMode::Normal => match key.code {
+                    KeyCode::Char('q') => return Ok(false),
+                    KeyCode::Char('/') => app.toggle_search_mode(),
+                    KeyCode::Up => app.on_up(),
+                    KeyCode::Down => app.on_down(),
+                    KeyCode::Enter => app.on_enter(),
+                    _ => {}
+                },
+                InputMode::SearchTopic => match key.code {
+                    KeyCode::Char(c) => app.on_search_char(c),
+                    KeyCode::Backspace => app.on_search_backspace(),
+                    KeyCode::Esc => {
+                        app.toggle_search_mode();
+                        app.clear_search();
+                    }
+                    KeyCode::Enter => app.toggle_search_mode(),
+                    _ => {}
+                },
             }
         }
     }
