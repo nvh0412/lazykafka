@@ -42,6 +42,7 @@ pub struct App {
 
 pub struct AppState {
     pub topics: StatefulList<Topic>,
+    pub filtered_topic: StatefulList<Topic>,
     pub records: StatefulList<Record>,
     // pub messages: StatefulList<Message>,
     pub filter: FilterState,
@@ -55,6 +56,7 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             topics: StatefulList::with_items(vec![]),
+            filtered_topic: StatefulList::with_items(vec![]),
             records: StatefulList::with_items(vec![]),
             filter: Default::default(),
             breadcrumb: Default::default(),
@@ -85,15 +87,15 @@ impl App {
     }
 
     pub fn on_up(&mut self) {
-        self.state.topics.previous()
+        self.state.filtered_topic.previous()
     }
 
     pub fn on_down(&mut self) {
-        self.state.topics.next()
+        self.state.filtered_topic.next()
     }
 
     pub fn on_enter(&mut self) {
-        let selected_topic = self.state.topics.selected();
+        let selected_topic = self.state.filtered_topic.selected();
 
         if let Some(topic) = selected_topic {
             self.select_topic(topic.name.clone());
@@ -109,14 +111,23 @@ impl App {
 
     pub fn on_search_char(&mut self, c: char) {
         self.state.topic_search_query.push(c);
+        self.update_filters();
     }
 
     pub fn on_search_backspace(&mut self) {
         self.state.topic_search_query.pop();
+        self.update_filters();
     }
 
     pub fn clear_search(&mut self) {
         self.state.topic_search_query.clear();
+        self.state.filtered_topic.update_items(self.state.topics.items.clone());
+    }
+
+    pub fn update_filters(&mut self) {
+        self.state.filtered_topic.update_items(
+            self.state.topics.items.iter().filter(|topic| topic.name.contains(&self.state.topic_search_query)).cloned().collect()
+        );
     }
 
     pub fn start_stats_polling(&self) {
@@ -176,6 +187,7 @@ impl App {
             match msg {
                 AppMessage::TopicsLoaded(topics) => {
                     self.state.topics = StatefulList::with_items(topics);
+                    self.state.filtered_topic = StatefulList::with_items(self.state.topics.items.clone());
                     if !self.state.topics.items.is_empty() {
                         self.state.topics.state.select(Some(0));
                     }

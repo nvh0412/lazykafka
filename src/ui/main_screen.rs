@@ -94,7 +94,7 @@ fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
     render_topics_list(
         frame,
         body[0],
-        &mut app.state.topics,
+        &mut app.state.filtered_topic,
         &app.state.topic_search_query,
         &app.input_mode,
     );
@@ -145,13 +145,6 @@ fn render_topics_list(
         .items
         .iter()
         .enumerate()
-        .filter(|(_, topic)| {
-            if search_query.is_empty() {
-                true
-            } else {
-                topic.name.to_lowercase().contains(&search_query.to_lowercase())
-            }
-        })
         .map(|(_, topic)| {
             let line = Line::from(vec![
                 Span::raw(&topic.name),

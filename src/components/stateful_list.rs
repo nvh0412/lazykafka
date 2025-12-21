@@ -12,6 +12,11 @@ impl<T> StatefulList<T> {
             state: ListState::default(),
         }
     }
+
+    pub fn update_items(&mut self, items: Vec<T>) {
+        self.items = items;
+    }
+
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
