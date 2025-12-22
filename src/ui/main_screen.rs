@@ -3,14 +3,15 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table, Cell},
 };
-
+use ratatui::widgets::Clear;
 use crate::{
     app::{App, InputMode},
     components::stateful_list::StatefulList,
     models::{broker_stats::ConnectionStatus, topic::Topic},
 };
+use crate::app::Screen;
 
 pub fn render(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
@@ -99,6 +100,118 @@ fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
         &app.input_mode,
     );
     render_messages_panel(frame, body[1], app);
+
+    if let Screen::TopicDetail(topic_name) = &app.screen  {
+        render_topic_popup(frame, topic_name, app);
+    }
+}
+
+fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
+    let popup_block = Block::default()
+        .borders(Borders::NONE)
+        .style(Style::default().bg(Color::Black));
+
+    let area = centered_rect(80, 60, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(popup_block, area);
+
+    // Create inner area for the content
+    let inner_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0)])
+        .split(area);
+
+    // Find the topic in the app state
+    let topic = app
+        .state
+        .topics
+        .items
+        .iter()
+        .find(|t| &t.name == topic_name);
+
+    let content = if let Some(topic) = topic {
+        if let Some(config) = &topic.config {
+            // Sort config entries by key name for easier reading
+            let mut sorted_configs: Vec<_> = config.configs.iter().collect();
+            println!("{:?}", sorted_configs);
+            sorted_configs.sort_by(|a, b| a.0.cmp(b.0));
+
+            // Create table rows from sorted config
+            let rows: Vec<Row> = sorted_configs
+                .iter()
+                .map(|(key, value)| {
+                    let value_str = value.value.as_deref().unwrap_or("<null>");
+                    let source_str = format!("{:?}", value.source);
+                    let flags = format!(
+                        "{}{}{}",
+                        if value.is_default { "D" } else { "" },
+                        if value.is_sensitive { "S" } else { "" },
+                        if value.is_read_only { "R" } else { "" }
+                    );
+
+                    Row::new(vec![
+                        Cell::from(key.as_str()),
+                        Cell::from(value_str),
+                        Cell::from(source_str),
+                        Cell::from(flags),
+                    ])
+                })
+                .collect();
+
+            Table::new(
+                rows,
+                [
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(20),
+                    Constraint::Percentage(10),
+                ],
+            )
+            .header(
+                Row::new(vec![
+                    Cell::from("Config Key").style(Style::default().add_modifier(Modifier::BOLD)),
+                    Cell::from("Value").style(Style::default().add_modifier(Modifier::BOLD)),
+                    Cell::from("Source").style(Style::default().add_modifier(Modifier::BOLD)),
+                    Cell::from("Flags").style(Style::default().add_modifier(Modifier::BOLD)),
+                ])
+                .style(Style::default().fg(Color::Yellow))
+                .bottom_margin(1),
+            )
+            .block(
+                Block::default()
+                    .title(format!("Topic Configuration: {} (Press Esc to close)", topic_name))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+            .style(Style::default().fg(Color::White))
+        } else {
+            // Config is loading
+            Table::new(
+                vec![Row::new(vec![Cell::from("Loading configuration...")])],
+                [Constraint::Percentage(100)],
+            )
+            .block(
+                Block::default()
+                    .title(format!("Topic Configuration: {} (Press Esc to close)", topic_name))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+        }
+    } else {
+        // Topic not found
+        Table::new(
+            vec![Row::new(vec![Cell::from("Topic not found")])],
+            [Constraint::Percentage(100)],
+        )
+        .block(
+            Block::default()
+                .title(format!("Topic Configuration: {} (Press Esc to close)", topic_name))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red)),
+        )
+    };
+
+    frame.render_widget(content, inner_layout[0]);
 }
 
 fn render_topics_list(
@@ -194,3 +307,25 @@ fn render_messages_panel(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_footer(frame: &mut Frame, area: Rect, app: &App) {}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    // Cut the given rectangle into three vertical pieces
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    // Then cut the middle vertical piece into three width-wise pieces
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1] // Return the middle chunk
+}

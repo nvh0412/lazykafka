@@ -5,7 +5,6 @@ use crate::client::KafkaClient;
 use crate::error;
 use crate::protocol::fetch::{FetchPartition, FetchTopic};
 use crate::protocol::list_offset::{ListOffsetPartition, ListOffsetPartitionResponse, ListOffsetTopic};
-use crate::protocol::offset_fetch::{OffsetFetchPartitionResponse, OffsetFetchTopic};
 use crate::protocol::record::Record;
 
 #[derive(Clone)]

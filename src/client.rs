@@ -2,6 +2,9 @@ use std::time::Duration;
 
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 
+use crate::protocol::describe_configs::{
+    DescribeConfigsRequest, DescribeConfigsResource, DescribeConfigsResponse, ResourceType,
+};
 use crate::protocol::fetch::{FetchRequest, FetchResponse, FetchTopic};
 use crate::protocol::list_offset::{ListOffsetRequest, ListOffsetResponse, ListOffsetTopic};
 use crate::protocol::offset_fetch::{OffsetFetchRequest, OffsetFetchResponse, OffsetFetchTopic};
@@ -43,7 +46,6 @@ pub struct KafkaClient {
 }
 
 impl KafkaClient {
-    // pub async fn connect(broker: &str) -> Result<Self>;
     pub fn get_stats(&self) -> BrokerStats {
         BrokerStats {
             broker: "localhost:9092".to_string(),
@@ -172,6 +174,32 @@ impl KafkaClient {
                 .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
 
         let response = ListOffsetResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// Fetch topic configurations
+    pub async fn fetch_topic_configs(&mut self, topic_name: String) -> Result<DescribeConfigsResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+
+        let resource = DescribeConfigsResource::new(ResourceType::Topic, topic_name);
+        let request = DescribeConfigsRequest::new(correlation_id, vec![resource]);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = DescribeConfigsResponse::decode(&response_bytes)?;
 
         if response.correlation_id != correlation_id {
             return Err(KafkaError::InvalidResponse {

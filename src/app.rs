@@ -9,7 +9,7 @@ use crate::protocol::fetch::{FetchPartition, FetchTopic};
 use crate::protocol::record::Record;
 use crate::{
     client::KafkaClient, components::stateful_list::StatefulList, error::KafkaError,
-    models::topic::Topic, repository::RepositoryManager, state::filter::FilterState,
+    models::topic::{Topic, TopicConfig}, repository::RepositoryManager, state::filter::FilterState,
 };
 
 pub enum AppMessage {
@@ -17,6 +17,7 @@ pub enum AppMessage {
     TopicSelected(String),
     StatsUpdated(BrokerStats),
     MessagesLoaded(Vec<Record>),
+    TopicConfigLoaded(String, TopicConfig),
     Error(String),
 }
 
@@ -101,6 +102,21 @@ impl App {
             self.select_topic(topic.name.clone());
         }
     }
+    
+    pub fn show_topic_info(&mut self) {
+        let selected_topic = self.state.filtered_topic.selected();
+
+        if let Some(topic) = selected_topic {
+            self.screen = Screen::TopicDetail(topic.name.clone());
+            self.load_topic_config(topic.name.clone());
+        } else {
+            self.screen = Screen::Main;
+        }
+    }
+    
+    pub fn close_popup(&mut self) {
+        self.screen = Screen::Main;
+    }
 
     pub fn toggle_search_mode(&mut self) {
         self.input_mode = match self.input_mode {
@@ -182,6 +198,26 @@ impl App {
         });
     }
 
+    pub fn load_topic_config(&self, topic_name: String) {
+        let tx = self.tx.clone();
+        let client = self.repositories.kafka_client.clone();
+
+        tokio::spawn(async move {
+            let mut client = client.write().await;
+            match client.fetch_topic_configs(topic_name.clone()).await {
+                Ok(response) => {
+                    if let Some(resource) = response.resources.first() {
+                        let config = TopicConfig::from(resource);
+                        let _ = tx.send(AppMessage::TopicConfigLoaded(topic_name, config));
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(AppMessage::Error(e.to_string()));
+                }
+            }
+        });
+    }
+
     pub fn handle_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
@@ -203,6 +239,17 @@ impl App {
                 }
                 AppMessage::MessagesLoaded(records) => {
                     self.state.records = StatefulList::with_items(records);
+                }
+                AppMessage::TopicConfigLoaded(topic_name, config) => {
+                    // Update the topic in the topics list
+                    if let Some(topic) = self.state.topics.items.iter_mut().find(|t| t.name == topic_name) {
+                        topic.config = Some(config.clone());
+                    }
+
+                    // Update the topic in the filtered list
+                    if let Some(topic) = self.state.filtered_topic.items.iter_mut().find(|t| t.name == topic_name) {
+                        topic.config = Some(config);
+                    }
                 }
             }
         }

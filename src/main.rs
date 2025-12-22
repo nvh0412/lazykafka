@@ -79,31 +79,36 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
 
         app.handle_messages();
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == event::KeyEventKind::Release {
-                // Skip events that are not KeyEventKind::Press
-                continue;
-            }
+        // Poll for events with timeout to allow UI updates from async tasks
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == event::KeyEventKind::Release {
+                    // Skip events that are not KeyEventKind::Press
+                    continue;
+                }
 
-            match app.input_mode {
-                InputMode::Normal => match key.code {
-                    KeyCode::Char('q') => return Ok(false),
-                    KeyCode::Char('/') => app.toggle_search_mode(),
-                    KeyCode::Up => app.on_up(),
-                    KeyCode::Down => app.on_down(),
-                    KeyCode::Enter => app.on_enter(),
-                    _ => {}
-                },
-                InputMode::SearchTopic => match key.code {
-                    KeyCode::Char(c) => app.on_search_char(c),
-                    KeyCode::Backspace => app.on_search_backspace(),
-                    KeyCode::Esc => {
-                        app.toggle_search_mode();
-                        app.clear_search();
-                    }
-                    KeyCode::Enter => app.toggle_search_mode(),
-                    _ => {}
-                },
+                match app.input_mode {
+                    InputMode::Normal => match key.code {
+                        KeyCode::Char('q') => return Ok(false),
+                        KeyCode::Char('/') => app.toggle_search_mode(),
+                        KeyCode::Up => app.on_up(),
+                        KeyCode::Down => app.on_down(),
+                        KeyCode::Enter => app.on_enter(),
+                        KeyCode::Char('i') => app.show_topic_info(),
+                        KeyCode::Esc => app.close_popup(),
+                        _ => {}
+                    },
+                    InputMode::SearchTopic => match key.code {
+                        KeyCode::Char(c) => app.on_search_char(c),
+                        KeyCode::Backspace => app.on_search_backspace(),
+                        KeyCode::Esc => {
+                            app.clear_search();
+                            app.toggle_search_mode();
+                        }
+                        KeyCode::Enter => app.toggle_search_mode(),
+                        _ => {}
+                    },
+                }
             }
         }
     }
