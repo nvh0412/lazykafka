@@ -10,7 +10,6 @@ pub struct TopicConfig {
 #[derive(Debug, Clone)]
 pub struct ConfigValue {
     pub value: Option<String>,
-    pub is_default: bool,
     pub is_sensitive: bool,
     pub is_read_only: bool,
     pub source: ConfigSource,
@@ -48,7 +47,6 @@ impl From<&DescribeConfigsResourceResult> for TopicConfig {
                 entry.name.clone(),
                 ConfigValue {
                     value: entry.value.clone(),
-                    is_default: entry.is_default,
                     is_sensitive: entry.is_sensitive,
                     is_read_only: entry.read_only,
                     source: ConfigSource::from(entry.config_source),

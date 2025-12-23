@@ -30,6 +30,7 @@ pub enum Screen {
 pub enum InputMode {
     Normal,
     SearchTopic,
+    ShowTopicConfig,
 }
 
 pub struct App {
@@ -108,20 +109,23 @@ impl App {
 
         if let Some(topic) = selected_topic {
             self.screen = Screen::TopicDetail(topic.name.clone());
+            self.input_mode = InputMode::ShowTopicConfig;
             self.load_topic_config(topic.name.clone());
         } else {
             self.screen = Screen::Main;
         }
     }
     
-    pub fn close_popup(&mut self) {
+    pub fn close_popup(&mut self) { 
         self.screen = Screen::Main;
+        self.input_mode = InputMode::Normal;
     }
 
     pub fn toggle_search_mode(&mut self) {
         self.input_mode = match self.input_mode {
             InputMode::Normal => InputMode::SearchTopic,
             InputMode::SearchTopic => InputMode::Normal,
+            _ => InputMode::Normal,
         };
     }
 

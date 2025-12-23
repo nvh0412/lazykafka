@@ -108,8 +108,7 @@ fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
 
 fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
     let popup_block = Block::default()
-        .borders(Borders::NONE)
-        .style(Style::default().bg(Color::Black));
+        .borders(Borders::NONE);
 
     let area = centered_rect(80, 60, frame.area());
     frame.render_widget(Clear, area);
@@ -133,7 +132,6 @@ fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
         if let Some(config) = &topic.config {
             // Sort config entries by key name for easier reading
             let mut sorted_configs: Vec<_> = config.configs.iter().collect();
-            println!("{:?}", sorted_configs);
             sorted_configs.sort_by(|a, b| a.0.cmp(b.0));
 
             // Create table rows from sorted config
@@ -141,19 +139,10 @@ fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
                 .iter()
                 .map(|(key, value)| {
                     let value_str = value.value.as_deref().unwrap_or("<null>");
-                    let source_str = format!("{:?}", value.source);
-                    let flags = format!(
-                        "{}{}{}",
-                        if value.is_default { "D" } else { "" },
-                        if value.is_sensitive { "S" } else { "" },
-                        if value.is_read_only { "R" } else { "" }
-                    );
 
                     Row::new(vec![
                         Cell::from(key.as_str()),
                         Cell::from(value_str),
-                        Cell::from(source_str),
-                        Cell::from(flags),
                     ])
                 })
                 .collect();
@@ -161,18 +150,14 @@ fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
             Table::new(
                 rows,
                 [
-                    Constraint::Percentage(30),
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(10),
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
                 ],
             )
             .header(
                 Row::new(vec![
                     Cell::from("Config Key").style(Style::default().add_modifier(Modifier::BOLD)),
                     Cell::from("Value").style(Style::default().add_modifier(Modifier::BOLD)),
-                    Cell::from("Source").style(Style::default().add_modifier(Modifier::BOLD)),
-                    Cell::from("Flags").style(Style::default().add_modifier(Modifier::BOLD)),
                 ])
                 .style(Style::default().fg(Color::Yellow))
                 .bottom_margin(1),
@@ -240,6 +225,7 @@ fn render_topics_list(
     let search_style = match input_mode {
         InputMode::SearchTopic => Style::default().fg(Color::Yellow),
         InputMode::Normal => Style::default().fg(Color::Gray),
+        _ => Style::default().fg(Color::Gray),
     };
 
     let search_box = Paragraph::new(search_text)

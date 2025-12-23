@@ -95,7 +95,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                         KeyCode::Down => app.on_down(),
                         KeyCode::Enter => app.on_enter(),
                         KeyCode::Char('i') => app.show_topic_info(),
-                        KeyCode::Esc => app.close_popup(),
                         _ => {}
                     },
                     InputMode::SearchTopic => match key.code {
@@ -108,6 +107,10 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                         KeyCode::Enter => app.toggle_search_mode(),
                         _ => {}
                     },
+                    InputMode::ShowTopicConfig => match key.code {
+                        KeyCode::Esc => app.close_popup(),
+                        _ => {}
+                    }
                 }
             }
         }
