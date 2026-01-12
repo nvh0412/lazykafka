@@ -5,13 +5,13 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table, Cell},
 };
-use ratatui::widgets::Clear;
+use ratatui::widgets::{Clear, Scrollbar, ScrollbarOrientation};
 use crate::{
     app::{App, InputMode},
     components::stateful_list::StatefulList,
     models::{broker_stats::ConnectionStatus, topic::Topic},
 };
-use crate::app::Screen;
+use crate::app::{Screen, TopicListState};
 
 pub fn render(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
@@ -95,7 +95,7 @@ fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
     render_topics_list(
         frame,
         body[0],
-        &mut app.state.filtered_topic,
+        &mut app.state.filtered_topic_state,
         &app.state.topic_search_query,
         &app.input_mode,
     );
@@ -110,7 +110,7 @@ fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
     let popup_block = Block::default()
         .borders(Borders::NONE);
 
-    let area = centered_rect(80, 60, frame.area());
+    let area = centered_rect(60, 60, frame.area());
     frame.render_widget(Clear, area);
     frame.render_widget(popup_block, area);
 
@@ -202,7 +202,7 @@ fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
 fn render_topics_list(
     frame: &mut Frame,
     area: Rect,
-    topics: &mut StatefulList<Topic>,
+    topic_state: &mut TopicListState,
     search_query: &str,
     input_mode: &InputMode,
 ) {
@@ -240,7 +240,7 @@ fn render_topics_list(
     frame.render_widget(search_box, chunks[0]);
 
     // Filter topics based on search query
-    let filtered_items: Vec<ListItem> = topics
+    let filtered_items: Vec<ListItem> = topic_state.topics
         .items
         .iter()
         .enumerate()
@@ -269,9 +269,19 @@ fn render_topics_list(
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol("► ");
+        .highlight_symbol("► ")
+        .scroll_padding(5);
 
-    frame.render_stateful_widget(list, chunks[1], &mut topics.state);
+    topic_state.vertical_scroll_state = topic_state.vertical_scroll_state.content_length(topic_state.topics.items.len());
+
+    frame.render_stateful_widget(list, chunks[1], &mut topic_state.topics.state);
+    frame.render_stateful_widget(
+        Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓")),
+        chunks[1],
+        &mut topic_state.vertical_scroll_state,
+    );
 }
 
 fn render_messages_panel(frame: &mut Frame, area: Rect, app: &App) {

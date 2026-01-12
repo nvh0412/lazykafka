@@ -1,12 +1,3 @@
-use std::{
-    io::{self, Result},
-    sync::Arc,
-    time::Duration,
-};
-
-use kafkatui_rs::protocol::list_offset::ListOffsetRequest;
-use protocol::fetch::{FetchPartition, FetchTopic};
-use protocol::offset_fetch::OffsetFetchTopic;
 use ratatui::{
     Terminal,
     crossterm::{
@@ -16,13 +7,16 @@ use ratatui::{
     },
     prelude::{Backend, CrosstermBackend},
 };
-use tokio::sync::mpsc;
+use std::time::{Duration, Instant};
+use std::{
+    io::{self, Result},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 use crate::{
     app::{App, InputMode},
     client_builder::ClientBuilder,
-    protocol::list_offset::{ListOffsetPartition, ListOffsetTopic},
     ui::main_screen::render,
 };
 
@@ -74,13 +68,15 @@ async fn main() -> Result<()> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<bool> {
+    let tick_rate = Duration::from_millis(250);
+    let mut last_tick = Instant::now();
     loop {
         terminal.draw(|f| render(f, app))?;
 
         app.handle_messages();
 
-        // Poll for events with timeout to allow UI updates from async tasks
-        if event::poll(Duration::from_millis(100))? {
+        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
+        if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == event::KeyEventKind::Release {
                     // Skip events that are not KeyEventKind::Press
@@ -110,7 +106,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                     InputMode::ShowTopicConfig => match key.code {
                         KeyCode::Esc => app.close_popup(),
                         _ => {}
-                    }
+                    },
                 }
             }
         }

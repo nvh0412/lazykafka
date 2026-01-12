@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
-
+use ratatui::widgets::ScrollbarState;
 use tokio::sync::{RwLock, mpsc};
 
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
@@ -42,9 +42,15 @@ pub struct App {
     repositories: RepositoryManager,
 }
 
+pub struct TopicListState {
+    pub topics: StatefulList<Topic>,
+    pub vertical_scroll_state: ScrollbarState,
+    pub vertical_scroll: usize,
+}
+
 pub struct AppState {
     pub topics: StatefulList<Topic>,
-    pub filtered_topic: StatefulList<Topic>,
+    pub filtered_topic_state: TopicListState,
     pub records: StatefulList<Record>,
     // pub messages: StatefulList<Message>,
     pub filter: FilterState,
@@ -58,7 +64,11 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             topics: StatefulList::with_items(vec![]),
-            filtered_topic: StatefulList::with_items(vec![]),
+            filtered_topic_state: TopicListState {
+                topics: StatefulList::with_items(vec![]),
+                vertical_scroll_state: ScrollbarState::default(),
+                vertical_scroll: 0,
+            },
             records: StatefulList::with_items(vec![]),
             filter: Default::default(),
             breadcrumb: Default::default(),
@@ -89,15 +99,19 @@ impl App {
     }
 
     pub fn on_up(&mut self) {
-        self.state.filtered_topic.previous()
+        self.state.filtered_topic_state.vertical_scroll = self.state.filtered_topic_state.vertical_scroll.saturating_sub(1);
+        self.state.filtered_topic_state.vertical_scroll_state = self.state.filtered_topic_state.vertical_scroll_state.position(self.state.filtered_topic_state.vertical_scroll);
+        self.state.filtered_topic_state.topics.previous()
     }
 
     pub fn on_down(&mut self) {
-        self.state.filtered_topic.next()
+        self.state.filtered_topic_state.vertical_scroll = self.state.filtered_topic_state.vertical_scroll.saturating_add(1);
+        self.state.filtered_topic_state.vertical_scroll_state = self.state.filtered_topic_state.vertical_scroll_state.position(self.state.filtered_topic_state.vertical_scroll);
+        self.state.filtered_topic_state.topics.next()
     }
 
     pub fn on_enter(&mut self) {
-        let selected_topic = self.state.filtered_topic.selected();
+        let selected_topic = self.state.filtered_topic_state.topics.selected();
 
         if let Some(topic) = selected_topic {
             self.select_topic(topic.name.clone());
@@ -105,7 +119,7 @@ impl App {
     }
     
     pub fn show_topic_info(&mut self) {
-        let selected_topic = self.state.filtered_topic.selected();
+        let selected_topic = self.state.filtered_topic_state.topics.selected();
 
         if let Some(topic) = selected_topic {
             self.screen = Screen::TopicDetail(topic.name.clone());
@@ -141,11 +155,11 @@ impl App {
 
     pub fn clear_search(&mut self) {
         self.state.topic_search_query.clear();
-        self.state.filtered_topic.update_items(self.state.topics.items.clone());
+        self.state.filtered_topic_state.topics.update_items(self.state.topics.items.clone());
     }
 
     pub fn update_filters(&mut self) {
-        self.state.filtered_topic.update_items(
+        self.state.filtered_topic_state.topics.update_items(
             self.state.topics.items.iter().filter(|topic| topic.name.contains(&self.state.topic_search_query)).cloned().collect()
         );
     }
@@ -227,9 +241,10 @@ impl App {
             match msg {
                 AppMessage::TopicsLoaded(topics) => {
                     self.state.topics = StatefulList::with_items(topics);
-                    self.state.filtered_topic = StatefulList::with_items(self.state.topics.items.clone());
+                    self.state.filtered_topic_state.topics = StatefulList::with_items(self.state.topics.items.clone());
                     if !self.state.topics.items.is_empty() {
                         self.state.topics.state.select(Some(0));
+                        self.state.filtered_topic_state.topics.state.select(Some(0));
                     }
                 }
                 AppMessage::TopicSelected(name) => {
@@ -251,7 +266,7 @@ impl App {
                     }
 
                     // Update the topic in the filtered list
-                    if let Some(topic) = self.state.filtered_topic.items.iter_mut().find(|t| t.name == topic_name) {
+                    if let Some(topic) = self.state.filtered_topic_state.topics.items.iter_mut().find(|t| t.name == topic_name) {
                         topic.config = Some(config);
                     }
                 }
