@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
-use ratatui::widgets::ScrollbarState;
+use ratatui::widgets::{ScrollbarState, TableState};
 use tokio::sync::{RwLock, mpsc};
 
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
@@ -48,9 +48,15 @@ pub struct TopicListState {
     pub vertical_scroll: usize,
 }
 
+pub struct TopicInfoState {
+    pub table_state: TableState,
+    pub scroll_state: ScrollbarState,
+}
+
 pub struct AppState {
     pub topics: StatefulList<Topic>,
     pub filtered_topic_state: TopicListState,
+    pub topic_info_state: TopicInfoState,
     pub records: StatefulList<Record>,
     // pub messages: StatefulList<Message>,
     pub filter: FilterState,
@@ -68,6 +74,10 @@ impl Default for AppState {
                 topics: StatefulList::with_items(vec![]),
                 vertical_scroll_state: ScrollbarState::default(),
                 vertical_scroll: 0,
+            },
+            topic_info_state: TopicInfoState {
+                table_state: TableState::default().with_selected(0),
+                scroll_state: ScrollbarState::default(),
             },
             records: StatefulList::with_items(vec![]),
             filter: Default::default(),

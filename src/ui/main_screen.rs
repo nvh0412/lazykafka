@@ -1,17 +1,18 @@
+use crate::app::{Screen, TopicInfoState, TopicListState};
+use crate::{
+    app::{App, InputMode}
+    ,
+    models::{broker_stats::ConnectionStatus, topic::Topic},
+};
+use ratatui::layout::Margin;
+use ratatui::widgets::{Clear, Scrollbar, ScrollbarOrientation};
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table, Cell},
+    widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table},
+    Frame,
 };
-use ratatui::widgets::{Clear, Scrollbar, ScrollbarOrientation};
-use crate::{
-    app::{App, InputMode},
-    components::stateful_list::StatefulList,
-    models::{broker_stats::ConnectionStatus, topic::Topic},
-};
-use crate::app::{Screen, TopicListState};
 
 pub fn render(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
@@ -101,14 +102,24 @@ fn render_body(frame: &mut Frame, area: Rect, app: &mut App) {
     );
     render_messages_panel(frame, body[1], app);
 
-    if let Screen::TopicDetail(topic_name) = &app.screen  {
-        render_topic_popup(frame, topic_name, app);
+    let topic_state = &mut app.state.topic_info_state;
+
+    if let Screen::TopicDetail(topic_name) = &mut app.screen {
+        let topic = app
+            .state
+            .topics
+            .items
+            .iter()
+            .find(|t| &t.name == topic_name);
+
+        if let Some(topic) = topic {
+            render_topic_popup(frame, topic, topic_state);
+        }
     }
 }
 
-fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
-    let popup_block = Block::default()
-        .borders(Borders::NONE);
+fn render_topic_popup(frame: &mut Frame, topic: &Topic, topic_info_state: &mut TopicInfoState) {
+    let popup_block = Block::default().borders(Borders::NONE);
 
     let area = centered_rect(60, 60, frame.area());
     frame.render_widget(Clear, area);
@@ -120,83 +131,79 @@ fn render_topic_popup(frame: &mut Frame, topic_name: &String, app: &App) {
         .constraints([Constraint::Min(0)])
         .split(area);
 
+    let topic_name = topic.name.clone();
+
     // Find the topic in the app state
-    let topic = app
-        .state
-        .topics
-        .items
-        .iter()
-        .find(|t| &t.name == topic_name);
 
-    let content = if let Some(topic) = topic {
-        if let Some(config) = &topic.config {
-            // Sort config entries by key name for easier reading
-            let mut sorted_configs: Vec<_> = config.configs.iter().collect();
-            sorted_configs.sort_by(|a, b| a.0.cmp(b.0));
+    let content = if let Some(config) = &topic.config {
+        // Sort config entries by key name for easier reading
+        let mut sorted_configs: Vec<_> = config.configs.iter().collect();
+        sorted_configs.sort_by(|a, b| a.0.cmp(b.0));
 
-            // Create table rows from sorted config
-            let rows: Vec<Row> = sorted_configs
-                .iter()
-                .map(|(key, value)| {
-                    let value_str = value.value.as_deref().unwrap_or("<null>");
+        // Create table rows from sorted config
+        let rows: Vec<Row> = sorted_configs
+            .iter()
+            .map(|(key, value)| {
+                let value_str = value.value.as_deref().unwrap_or("<null>");
 
-                    Row::new(vec![
-                        Cell::from(key.as_str()),
-                        Cell::from(value_str),
-                    ])
-                })
-                .collect();
+                Row::new(vec![Cell::from(key.as_str()), Cell::from(value_str)])
+            })
+            .collect();
 
-            Table::new(
-                rows,
-                [
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
-                ],
-            )
-            .header(
-                Row::new(vec![
-                    Cell::from("Config Key").style(Style::default().add_modifier(Modifier::BOLD)),
-                    Cell::from("Value").style(Style::default().add_modifier(Modifier::BOLD)),
-                ])
-                .style(Style::default().fg(Color::Yellow))
-                .bottom_margin(1),
-            )
-            .block(
-                Block::default()
-                    .title(format!("Topic Configuration: {} (Press Esc to close)", topic_name))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            )
-            .style(Style::default().fg(Color::White))
-        } else {
-            // Config is loading
-            Table::new(
-                vec![Row::new(vec![Cell::from("Loading configuration...")])],
-                [Constraint::Percentage(100)],
-            )
-            .block(
-                Block::default()
-                    .title(format!("Topic Configuration: {} (Press Esc to close)", topic_name))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            )
-        }
-    } else {
-        // Topic not found
+        topic_info_state.scroll_state = topic_info_state.scroll_state.position(10);
+
         Table::new(
-            vec![Row::new(vec![Cell::from("Topic not found")])],
+            rows,
+            [Constraint::Percentage(50), Constraint::Percentage(50)],
+        )
+        .header(
+            Row::new(vec![
+                Cell::from("Config Key").style(Style::default().add_modifier(Modifier::BOLD)),
+                Cell::from("Value").style(Style::default().add_modifier(Modifier::BOLD)),
+            ])
+            .style(Style::default().fg(Color::Yellow))
+            .bottom_margin(1),
+        )
+        .block(
+            Block::default()
+                .title(format!(
+                    "Topic Configuration: {} (Press Esc to close)",
+                    topic_name
+                ))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .style(Style::default().fg(Color::White))
+    } else {
+        // Config is loading
+        Table::new(
+            vec![Row::new(vec![Cell::from("Loading configuration...")])],
             [Constraint::Percentage(100)],
         )
         .block(
             Block::default()
-                .title(format!("Topic Configuration: {} (Press Esc to close)", topic_name))
+                .title(format!(
+                    "Topic Configuration: {} (Press Esc to close)",
+                    topic_name
+                ))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Red)),
+                .border_style(Style::default().fg(Color::Cyan)),
         )
     };
 
-    frame.render_widget(content, inner_layout[0]);
+    frame.render_stateful_widget(content, area, &mut topic_info_state.table_state);
+    frame.render_stateful_widget(
+        Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None),
+        area.inner(Margin {
+            vertical: 1,
+            horizontal: 1,
+        }),
+        &mut topic_info_state.scroll_state,
+    );
+
 }
 
 fn render_topics_list(
@@ -240,7 +247,8 @@ fn render_topics_list(
     frame.render_widget(search_box, chunks[0]);
 
     // Filter topics based on search query
-    let filtered_items: Vec<ListItem> = topic_state.topics
+    let filtered_items: Vec<ListItem> = topic_state
+        .topics
         .items
         .iter()
         .enumerate()
@@ -272,7 +280,9 @@ fn render_topics_list(
         .highlight_symbol("► ")
         .scroll_padding(5);
 
-    topic_state.vertical_scroll_state = topic_state.vertical_scroll_state.content_length(topic_state.topics.items.len());
+    topic_state.vertical_scroll_state = topic_state
+        .vertical_scroll_state
+        .content_length(topic_state.topics.items.len());
 
     frame.render_stateful_widget(list, chunks[1], &mut topic_state.topics.state);
     frame.render_stateful_widget(
