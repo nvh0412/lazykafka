@@ -1,3 +1,4 @@
+use std::time::Duration;
 use crate::models::broker_stats::ConnectionStatus;
 use crate::state::app_state::{AppMessage, AppState, InputMode, TopicListState};
 use crate::ui::screen::{AppAction, EventResult, Screen};
@@ -198,6 +199,38 @@ impl MainScreen {
     }
 
     fn render_footer(&self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {}
+
+    pub fn load_topics(&self, app_state: &mut AppState) {
+        let tx = app_state.tx.clone();
+        let repo = app_state.repository_manager.topics().clone();
+
+        tokio::spawn(async move {
+            match repo.fetch_all().await {
+                Ok(topics) => {
+                    let _ = tx.send(AppMessage::TopicsLoaded(topics));
+                }
+                Err(e) => {
+                    let _ = tx.send(AppMessage::Error(e.to_string()));
+                }
+            }
+        });
+    }
+
+    pub fn start_stats_polling(&self, app_state: &mut AppState) {
+        let tx = app_state.tx.clone();
+        let client = app_state.repository_manager.kafka_client.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+
+                // Read lock is fine since get_stats() only reads
+                let stats = client.read().await.get_stats();
+                let _ = tx.send(AppMessage::StatsUpdated(stats));
+            }
+        });
+    }
 }
 
 impl Screen for MainScreen {
@@ -214,6 +247,11 @@ impl Screen for MainScreen {
         self.render_header(frame, chunks[0], app_state);
         self.render_body(frame, chunks[1], app_state);
         self.render_footer(frame, chunks[2], app_state);
+    }
+
+    fn on_mount(&mut self, app_state: &mut AppState) {
+        self.load_topics(app_state);
+        self.start_stats_polling(app_state);
     }
 
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {

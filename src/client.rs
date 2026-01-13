@@ -17,6 +17,7 @@ use crate::{
         metadata::{MetadataRequest, MetadataResponse},
     },
 };
+use crate::protocol::delete_topics::{DeleteTopicsRequest, DeleteTopicsResponse};
 
 #[derive(Clone, Debug)]
 pub struct ClientConfig {
@@ -200,6 +201,30 @@ impl KafkaClient {
                 .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
 
         let response = DescribeConfigsResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    pub async fn delete_topics(&mut self, topic_names: Vec<String>) -> Result<DeleteTopicsResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+
+        let resource = DeleteTopicsRequest::new(correlation_id, topic_names, 100);
+
+        self.connection.send_request(&resource.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = DeleteTopicsResponse::decode(&response_bytes)?;
 
         if response.correlation_id != correlation_id {
             return Err(KafkaError::InvalidResponse {

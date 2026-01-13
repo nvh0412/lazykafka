@@ -46,8 +46,6 @@ async fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new(sharable_client);
-    app.load_topics();
-    app.start_stats_polling();
 
     let _ = run_app(&mut terminal, &mut app);
 

@@ -3,8 +3,8 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::prelude::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Clear, Row, Scrollbar, ScrollbarOrientation, Table};
-use crate::models::topic::Topic;
-use crate::state::app_state::{AppState, TopicInfoState};
+use crate::models::topic::{Topic, TopicConfig};
+use crate::state::app_state::{AppMessage, AppState, TopicInfoState};
 use crate::ui::screen::{EventResult, Screen};
 use crate::ui::screen::AppAction::ClosePopup;
 
@@ -125,6 +125,27 @@ impl TopicDetailModal {
             ])
             .split(popup_layout[1])[1] // Return the middle chunk
     }
+
+    fn load_topic_config(&mut self, app_state: &mut AppState, topic_name: String) {
+        let tx = app_state.tx.clone();
+        let client = app_state.repository_manager.kafka_client.clone();
+
+        tokio::spawn(async move {
+            let mut client = client.write().await;
+            match client.fetch_topic_configs(topic_name.clone()).await {
+                Ok(response) => {
+                    if let Some(resource) = response.resources.first() {
+                        let config = TopicConfig::from(resource);
+                        let _ = tx.send(AppMessage::TopicConfigLoaded(topic_name, config));
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(AppMessage::Error(e.to_string()));
+                }
+            }
+        });
+    }
+
 }
 
 impl Screen for TopicDetailModal {
@@ -146,5 +167,9 @@ impl Screen for TopicDetailModal {
             KeyCode::Esc => EventResult::Action(ClosePopup),
             _ => EventResult::Handled
         }
+    }
+
+    fn on_mount(&mut self, app_state: &mut AppState) {
+        self.load_topic_config(app_state, self.topic_name.clone());
     }
 }

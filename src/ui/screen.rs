@@ -22,9 +22,7 @@ pub trait Screen: Send {
 }
 
 pub enum AppAction {
-    LoadTopics,
     LoadMessages(String),
-    LoadTopicConfig(String),
     SearchTopic(char),
     SearchTopicBackspace,
     ToggleSearchMode,

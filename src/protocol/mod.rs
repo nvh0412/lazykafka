@@ -1,6 +1,7 @@
 use crate::error::Result;
 
 pub mod api_versions;
+pub mod delete_topics;
 pub mod describe_configs;
 pub mod fetch;
 pub mod list_offset;

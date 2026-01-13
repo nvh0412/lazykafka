@@ -11,30 +11,20 @@ use crate::{
     components::stateful_list::StatefulList
     ,
     models::topic::TopicConfig,
-    repository::RepositoryManager
-    ,
 };
 
-pub enum Screen {
-    Main,
-    MessageDetail,
-    TopicDetail(String),
-}
-
 pub struct App {
-    pub screen: Screen,
     pub screen_manager: ScreenManager,
     pub state: AppState,
-    repositories: RepositoryManager,
 }
 
 impl App {
     pub fn new(kafka_client: Arc<RwLock<KafkaClient>>) -> Self {
+        let mut state = AppState::default(kafka_client);
+        let screen_manager = ScreenManager::default(&mut state);
         Self {
-            screen: Screen::Main,
-            state: AppState::default(),
-            screen_manager: ScreenManager::default(),
-            repositories: RepositoryManager::new(kafka_client),
+            state,
+            screen_manager,
         }
     }
 
@@ -43,14 +33,6 @@ impl App {
             EventResult::Action(action) => match action {
                 AppAction::LoadMessages(topic) => {
                     self.load_messages_for_topic(topic.clone());
-                    true
-                }
-                AppAction::LoadTopics => {
-                    self.load_topics();
-                    true
-                }
-                AppAction::LoadTopicConfig(topic) => {
-                    self.load_topic_config(topic.clone());
                     true
                 }
                 AppAction::ClosePopup => {
@@ -71,13 +53,7 @@ impl App {
                 }
             },
             EventResult::Push(screen_type) => {
-                match screen_type {
-                    ScreenType::TopicDetail(topic_name) => {
-                        self.load_topic_config(topic_name.clone());
-                    }
-                    _ => {}
-                }
-                self.screen_manager.push(screen_type.clone());
+                self.screen_manager.push(screen_type.clone(), &mut self.state);
                 true
             }
             EventResult::Quit => false,
@@ -86,7 +62,7 @@ impl App {
     }
 
     pub fn close_popup(&mut self) {
-        self.screen_manager.pop();
+        self.screen_manager.pop(&mut self.state);
         self.state.input_mode = InputMode::Normal;
     }
 
@@ -120,66 +96,14 @@ impl App {
         );
     }
 
-    pub fn start_stats_polling(&self) {
-        let tx = self.state.tx.clone();
-        let client = self.repositories.kafka_client.clone();
-
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1));
-            loop {
-                interval.tick().await;
-
-                // Read lock is fine since get_stats() only reads
-                let stats = client.read().await.get_stats();
-                let _ = tx.send(AppMessage::StatsUpdated(stats));
-            }
-        });
-    }
-
-    pub fn load_topics(&self) {
-        let tx = self.state.tx.clone();
-        let repo = self.repositories.topics().clone();
-
-        tokio::spawn(async move {
-            match repo.fetch_all().await {
-                Ok(topics) => {
-                    let _ = tx.send(AppMessage::TopicsLoaded(topics));
-                }
-                Err(e) => {
-                    let _ = tx.send(AppMessage::Error(e.to_string()));
-                }
-            }
-        });
-    }
-
     pub fn load_messages_for_topic(&self, topic: String) {
         let tx = self.state.tx.clone();
-        let repo = self.repositories.messages().clone();
+        let repo = self.state.repository_manager.messages().clone();
 
         tokio::spawn(async move {
             match repo.fetch_by_topic(topic).await {
                 Ok(records) => {
                     let _ = tx.send(AppMessage::MessagesLoaded(records));
-                }
-                Err(e) => {
-                    let _ = tx.send(AppMessage::Error(e.to_string()));
-                }
-            }
-        });
-    }
-
-    pub fn load_topic_config(&self, topic_name: String) {
-        let tx = self.state.tx.clone();
-        let client = self.repositories.kafka_client.clone();
-
-        tokio::spawn(async move {
-            let mut client = client.write().await;
-            match client.fetch_topic_configs(topic_name.clone()).await {
-                Ok(response) => {
-                    if let Some(resource) = response.resources.first() {
-                        let config = TopicConfig::from(resource);
-                        let _ = tx.send(AppMessage::TopicConfigLoaded(topic_name, config));
-                    }
                 }
                 Err(e) => {
                     let _ = tx.send(AppMessage::Error(e.to_string()));

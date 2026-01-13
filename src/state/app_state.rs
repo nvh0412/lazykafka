@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::components::stateful_list::StatefulList;
 use crate::error::KafkaError;
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
@@ -5,7 +6,9 @@ use crate::models::topic::{Topic, TopicConfig};
 use crate::protocol::record::Record;
 use crate::state::filter::FilterState;
 use ratatui::widgets::{ScrollbarState, TableState};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
+use crate::client::KafkaClient;
+use crate::repository::RepositoryManager;
 
 pub enum InputMode {
     Normal,
@@ -46,11 +49,13 @@ pub struct AppState {
     pub topic_search_query: String,
     pub rx: mpsc::UnboundedReceiver<AppMessage>,
     pub tx: mpsc::UnboundedSender<AppMessage>,
+    pub repository_manager: RepositoryManager
 }
 
-impl Default for AppState {
-    fn default() -> Self {
+impl AppState {
+    pub fn default(kafka_client: Arc<RwLock<KafkaClient>>) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
+        let repository_manager = RepositoryManager::new(kafka_client);
 
         Self {
             input_mode: InputMode::Normal,
@@ -77,6 +82,7 @@ impl Default for AppState {
             topic_search_query: String::new(),
             tx,
             rx,
+            repository_manager
         }
     }
 }
