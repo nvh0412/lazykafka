@@ -51,8 +51,6 @@ impl TopicDetailModal {
                 })
                 .collect();
 
-            topic_info_state.scroll_state = topic_info_state.scroll_state.position(10);
-
             Table::new(
                 rows,
                 [Constraint::Percentage(50), Constraint::Percentage(50)],
@@ -133,6 +131,13 @@ impl Screen for TopicDetailModal {
     fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
         if let Some(topic) = app_state.topics.items.iter().find(|topic| topic.name == self.topic_name) {
             self.render_topic_popup(frame, topic, &mut app_state.topic_info_state)
+        } else {
+            let popup_area = self.centered_rect(80, 80, area);
+            frame.render_widget(Clear, popup_area);
+            let not_found_block = Block::default()
+                .title(format!("Topic '{}' not found", self.topic_name))
+                .borders(Borders::ALL);
+            frame.render_widget(not_found_block, popup_area);
         }
     }
 

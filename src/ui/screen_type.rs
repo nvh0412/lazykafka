@@ -14,7 +14,7 @@ pub enum ScreenType {
 pub fn create_screen(screen_type: ScreenType) -> Box<dyn Screen> {
     match screen_type {
         ScreenType::Main => Box::new(MainScreen::new()),
-        ScreenType::TopicDetail(t) => Box::new(TopicDetailModal::new(t.clone())),
+        ScreenType::TopicDetail(t) => Box::new(TopicDetailModal::new(t)),
         _ => unimplemented!()
     }
 }
