@@ -1,6 +1,6 @@
 use std::time::Duration;
 use crate::models::broker_stats::ConnectionStatus;
-use crate::state::app_state::{AppMessage, AppState, InputMode, TopicListState};
+use crate::state::app_state::{AppMessage, AppState, TopicListState};
 use crate::ui::screen::{AppAction, EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
 use ratatui::crossterm::event::KeyCode;
@@ -11,11 +11,21 @@ use ratatui::widgets::{
 };
 use ratatui::Frame;
 
-pub struct MainScreen {}
+pub enum InputMode {
+    SelectTopic,
+    SearchTopic,
+    ViewRecords,
+}
+
+pub struct MainScreen {
+    input_mode: InputMode,
+}
 
 impl MainScreen {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            input_mode: InputMode::SelectTopic,
+        }
     }
 
     fn render_header(&self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
@@ -87,7 +97,6 @@ impl MainScreen {
             body[0],
             &mut app_state.filtered_topic_state,
             &app_state.topic_search_query,
-            &app_state.input_mode,
         );
         self.render_messages_panel(frame, body[1], app_state);
     }
@@ -98,7 +107,6 @@ impl MainScreen {
         area: Rect,
         topic_state: &mut TopicListState,
         search_query: &str,
-        input_mode: &InputMode,
     ) {
         // Split the area into search box (3 lines) and topic list
         let chunks = Layout::default()
@@ -116,9 +124,8 @@ impl MainScreen {
             search_query.to_string()
         };
 
-        let search_style = match input_mode {
-            InputMode::SearchTopic => Style::default().fg(Color::Yellow),
-            InputMode::Normal => Style::default().fg(Color::Gray),
+        let search_style = match self.input_mode {
+            InputMode::SearchTopic => Style::default().fg(Color::White),
             _ => Style::default().fg(Color::Gray),
         };
 
@@ -151,12 +158,17 @@ impl MainScreen {
             })
             .collect();
 
+        let list_style = match self.input_mode {
+            InputMode::SelectTopic => Style::default().fg(Color::White),
+            _ => Style::default().fg(Color::Gray),
+        };
+
         let list = List::new(filtered_items)
             .block(
                 Block::default()
                     .title("Topics")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Gray)),
+                    .border_style(list_style),
             )
             .highlight_style(
                 Style::default()
@@ -173,9 +185,7 @@ impl MainScreen {
 
         frame.render_stateful_widget(list, chunks[1], &mut topic_state.topics.state);
         frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("↑"))
-                .end_symbol(Some("↓")),
+            Scrollbar::new(ScrollbarOrientation::VerticalRight),
             chunks[1],
             &mut topic_state.vertical_scroll_state,
         );
@@ -189,11 +199,17 @@ impl MainScreen {
             .map(|r| ListItem::new(format!("{}", String::from_utf8(r.value.clone()).unwrap())))
             .collect();
 
+
+        let list_style = match self.input_mode {
+            InputMode::ViewRecords => Style::default().fg(Color::White),
+            _ => Style::default().fg(Color::Gray),
+        };
+
         let list = List::new(items).block(
             Block::default()
                 .title("Records")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Gray)),
+                .border_style(list_style),
         );
         frame.render_widget(list, area);
     }
@@ -231,6 +247,37 @@ impl MainScreen {
             }
         });
     }
+
+    pub fn switch_view_mode(&mut self, input_mode: InputMode) {
+        self.input_mode = input_mode;
+    }
+
+    pub fn update_filters(&mut self, app_state: &mut AppState) {
+        app_state.filtered_topic_state.topics.update_items(
+            app_state
+                .topics
+                .items
+                .iter()
+                .filter(|topic| topic.name.contains(&app_state.topic_search_query))
+                .cloned()
+                .collect(),
+        );
+    }
+
+    pub fn on_search_char(&mut self, c: char, app_state: &mut AppState) {
+        app_state.topic_search_query.push(c);
+        self.update_filters(app_state);
+    }
+
+    pub fn on_search_backspace(&mut self, app_state: &mut AppState) {
+        app_state.topic_search_query.pop();
+        self.update_filters(app_state);
+    }
+
+    pub fn on_reset_filters(&mut self, app_state: &mut AppState) {
+        app_state.topic_search_query.clear();
+        self.update_filters(app_state);
+    }
 }
 
 impl Screen for MainScreen {
@@ -255,10 +302,13 @@ impl Screen for MainScreen {
     }
 
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
-        match app_state.input_mode {
-            InputMode::Normal => match key {
+        match self.input_mode {
+            InputMode::SelectTopic => match key {
                 KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
-                KeyCode::Char('/') => EventResult::Action(AppAction::ToggleSearchMode),
+                KeyCode::Char('/') => {
+                    self.switch_view_mode(InputMode::SearchTopic);
+                    EventResult::Handled
+                },
                 KeyCode::Char('i') => {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
                         EventResult::Push(ScreenType::TopicDetail(topic.name.clone()))
@@ -308,15 +358,39 @@ impl Screen for MainScreen {
                         EventResult::Handled
                     }
                 }
+                KeyCode::Tab => {
+                    self.switch_view_mode(InputMode::ViewRecords);
+                    EventResult::Handled
+                },
                 _ => EventResult::Handled,
             },
             InputMode::SearchTopic => match key {
-                KeyCode::Char(c) => EventResult::Action(AppAction::SearchTopic(c)),
-                KeyCode::Backspace => EventResult::Action(AppAction::SearchTopicBackspace), 
-                KeyCode::Esc => EventResult::Action(AppAction::ToggleSearchMode),
-                KeyCode::Enter => EventResult::Action(AppAction::ToggleSearchMode),
+                KeyCode::Char(c) => {
+                    self.on_search_char(c, app_state);
+                    EventResult::Handled
+                },
+                KeyCode::Backspace => {
+                    self.on_search_backspace(app_state);
+                    EventResult::Handled
+                },
+                KeyCode::Esc => {
+                    self.on_reset_filters(app_state);
+                    self.switch_view_mode(InputMode::SelectTopic);
+                    EventResult::Handled
+                },
+                KeyCode::Enter => {
+                    self.switch_view_mode(InputMode::SelectTopic);
+                    EventResult::Handled
+                },
                 _ => EventResult::Handled,
             },
+            InputMode::ViewRecords => match key {
+                KeyCode::Esc | KeyCode::Tab => {
+                    self.switch_view_mode(InputMode::SelectTopic);
+                    EventResult::Handled
+                },
+                _ => EventResult::Handled,
+            }
         }
     }
 }

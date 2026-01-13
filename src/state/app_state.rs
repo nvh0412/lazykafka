@@ -10,11 +10,6 @@ use tokio::sync::{mpsc, RwLock};
 use crate::client::KafkaClient;
 use crate::repository::RepositoryManager;
 
-pub enum InputMode {
-    Normal,
-    SearchTopic,
-}
-
 pub struct TopicListState {
     pub topics: StatefulList<Topic>,
     pub vertical_scroll_state: ScrollbarState,
@@ -37,7 +32,6 @@ pub enum AppMessage {
 }
 
 pub struct AppState {
-    pub input_mode: InputMode,
     pub topics: StatefulList<Topic>,
     pub filtered_topic_state: TopicListState,
     pub topic_info_state: TopicInfoState,
@@ -59,7 +53,6 @@ impl AppState {
         let repository_manager = RepositoryManager::new(kafka_client);
 
         Self {
-            input_mode: InputMode::Normal,
             topics: StatefulList::with_items(vec![]),
             filtered_topic_state: TopicListState {
                 topics: StatefulList::with_items(vec![]),

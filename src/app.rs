@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::state::app_state::{AppMessage, AppState, InputMode};
+use crate::state::app_state::{AppMessage, AppState};
 use crate::ui::screen::{AppAction, ConfirmAction, EventResult};
 use crate::ui::screen_manager::ScreenManager;
 use crate::ui::screen_type::ScreenType;
@@ -31,18 +31,6 @@ impl App {
                 }
                 AppAction::ClosePopup => {
                     self.close_popup();
-                    true
-                }
-                AppAction::ToggleSearchMode => {
-                    self.toggle_search_mode();
-                    true
-                }
-                AppAction::SearchTopic(c) => {
-                    self.on_search_char(c.clone());
-                    true
-                }
-                AppAction::SearchTopicBackspace => {
-                    self.on_search_backspace();
                     true
                 }
                 AppAction::ConfirmExitApp => {
@@ -78,37 +66,6 @@ impl App {
 
     pub fn close_popup(&mut self) {
         self.screen_manager.pop(&mut self.state);
-        self.state.input_mode = InputMode::Normal;
-    }
-
-    pub fn toggle_search_mode(&mut self) {
-        self.state.input_mode = match self.state.input_mode {
-            InputMode::Normal => InputMode::SearchTopic,
-            InputMode::SearchTopic => InputMode::Normal,
-            _ => InputMode::Normal,
-        };
-    }
-
-    pub fn on_search_char(&mut self, c: char) {
-        self.state.topic_search_query.push(c);
-        self.update_filters();
-    }
-
-    pub fn on_search_backspace(&mut self) {
-        self.state.topic_search_query.pop();
-        self.update_filters();
-    }
-
-    pub fn update_filters(&mut self) {
-        self.state.filtered_topic_state.topics.update_items(
-            self.state
-                .topics
-                .items
-                .iter()
-                .filter(|topic| topic.name.contains(&self.state.topic_search_query))
-                .cloned()
-                .collect(),
-        );
     }
 
     pub fn load_messages_for_topic(&self, topic: String) {

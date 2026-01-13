@@ -23,9 +23,6 @@ pub trait Screen: Send {
 
 pub enum AppAction {
     LoadMessages(String),
-    SearchTopic(char),
-    SearchTopicBackspace,
-    ToggleSearchMode,
     ClosePopup,
     ConfirmExitApp,
     DeletedTopic(String),
