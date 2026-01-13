@@ -1,25 +1,19 @@
 use std::sync::Arc;
 use std::time::Duration;
-use ratatui::widgets::ScrollbarState;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::RwLock;
 
-use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
-
-use crate::protocol::fetch::{FetchPartition, FetchTopic};
-use crate::protocol::record::Record;
+use crate::state::app_state::{AppMessage, AppState, InputMode};
+use crate::ui::screen::{AppAction, EventResult};
+use crate::ui::screen_manager::ScreenManager;
+use crate::ui::screen_type::ScreenType;
 use crate::{
-    client::KafkaClient, components::stateful_list::StatefulList, error::KafkaError,
-    models::topic::{Topic, TopicConfig}, repository::RepositoryManager, state::filter::FilterState,
+    client::KafkaClient,
+    components::stateful_list::StatefulList
+    ,
+    models::topic::TopicConfig,
+    repository::RepositoryManager
+    ,
 };
-
-pub enum AppMessage {
-    TopicsLoaded(Vec<Topic>),
-    TopicSelected(String),
-    StatsUpdated(BrokerStats),
-    MessagesLoaded(Vec<Record>),
-    TopicConfigLoaded(String, TopicConfig),
-    Error(String),
-}
 
 pub enum Screen {
     Main,
@@ -27,116 +21,77 @@ pub enum Screen {
     TopicDetail(String),
 }
 
-pub enum InputMode {
-    Normal,
-    SearchTopic,
-    ShowTopicConfig,
-}
-
 pub struct App {
     pub screen: Screen,
-    pub input_mode: InputMode,
-    pub rx: mpsc::UnboundedReceiver<AppMessage>,
-    tx: mpsc::UnboundedSender<AppMessage>,
+    pub screen_manager: ScreenManager,
     pub state: AppState,
     repositories: RepositoryManager,
 }
 
-pub struct TopicListState {
-    pub topics: StatefulList<Topic>,
-    pub vertical_scroll_state: ScrollbarState,
-    pub vertical_scroll: usize,
-}
-
-pub struct AppState {
-    pub topics: StatefulList<Topic>,
-    pub filtered_topic_state: TopicListState,
-    pub records: StatefulList<Record>,
-    // pub messages: StatefulList<Message>,
-    pub filter: FilterState,
-    pub broker_stats: BrokerStats,
-    pub breadcrumb: Vec<String>,
-    pub error: Option<KafkaError>,
-    pub topic_search_query: String,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            topics: StatefulList::with_items(vec![]),
-            filtered_topic_state: TopicListState {
-                topics: StatefulList::with_items(vec![]),
-                vertical_scroll_state: ScrollbarState::default(),
-                vertical_scroll: 0,
-            },
-            records: StatefulList::with_items(vec![]),
-            filter: Default::default(),
-            breadcrumb: Default::default(),
-            broker_stats: BrokerStats {
-                bytes_sent: 0,
-                bytes_received: 0,
-                status: ConnectionStatus::default(),
-                broker: "".to_string(),
-            },
-            error: None,
-            topic_search_query: String::new(),
-        }
-    }
-}
-
 impl App {
     pub fn new(kafka_client: Arc<RwLock<KafkaClient>>) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
-
         Self {
             screen: Screen::Main,
-            input_mode: InputMode::Normal,
             state: AppState::default(),
-            rx,
-            tx,
+            screen_manager: ScreenManager::default(),
             repositories: RepositoryManager::new(kafka_client),
         }
     }
 
-    pub fn on_up(&mut self) {
-        self.state.filtered_topic_state.vertical_scroll = self.state.filtered_topic_state.vertical_scroll.saturating_sub(1);
-        self.state.filtered_topic_state.vertical_scroll_state = self.state.filtered_topic_state.vertical_scroll_state.position(self.state.filtered_topic_state.vertical_scroll);
-        self.state.filtered_topic_state.topics.previous()
-    }
-
-    pub fn on_down(&mut self) {
-        self.state.filtered_topic_state.vertical_scroll = self.state.filtered_topic_state.vertical_scroll.saturating_add(1);
-        self.state.filtered_topic_state.vertical_scroll_state = self.state.filtered_topic_state.vertical_scroll_state.position(self.state.filtered_topic_state.vertical_scroll);
-        self.state.filtered_topic_state.topics.next()
-    }
-
-    pub fn on_enter(&mut self) {
-        let selected_topic = self.state.filtered_topic_state.topics.selected();
-
-        if let Some(topic) = selected_topic {
-            self.select_topic(topic.name.clone());
+    pub fn handle_event_result(&mut self, event_result: &mut EventResult) -> bool {
+        match event_result {
+            EventResult::Action(action) => match action {
+                AppAction::LoadMessages(topic) => {
+                    self.load_messages_for_topic(topic.clone());
+                    true
+                }
+                AppAction::LoadTopics => {
+                    self.load_topics();
+                    true
+                }
+                AppAction::LoadTopicConfig(topic) => {
+                    self.load_topic_config(topic.clone());
+                    true
+                }
+                AppAction::ClosePopup => {
+                    self.close_popup();
+                    true
+                }
+                AppAction::ToggleSearchMode => {
+                    self.toggle_search_mode();
+                    true
+                }
+                AppAction::SearchTopic(c) => {
+                    self.on_search_char(c.clone());
+                    true
+                }
+                AppAction::SearchTopicBackspace => {
+                    self.on_search_backspace();
+                    true
+                }
+            },
+            EventResult::Push(screen_type) => {
+                match screen_type {
+                    ScreenType::TopicDetail(topic_name) => {
+                        self.load_topic_config(topic_name.clone());
+                    }
+                    _ => {}
+                }
+                self.screen_manager.push(screen_type.clone());
+                true
+            }
+            EventResult::Quit => false,
+            _ => true,
         }
     }
-    
-    pub fn show_topic_info(&mut self) {
-        let selected_topic = self.state.filtered_topic_state.topics.selected();
 
-        if let Some(topic) = selected_topic {
-            self.screen = Screen::TopicDetail(topic.name.clone());
-            self.input_mode = InputMode::ShowTopicConfig;
-            self.load_topic_config(topic.name.clone());
-        } else {
-            self.screen = Screen::Main;
-        }
-    }
-    
-    pub fn close_popup(&mut self) { 
-        self.screen = Screen::Main;
-        self.input_mode = InputMode::Normal;
+    pub fn close_popup(&mut self) {
+        self.screen_manager.pop();
+        self.state.input_mode = InputMode::Normal;
     }
 
     pub fn toggle_search_mode(&mut self) {
-        self.input_mode = match self.input_mode {
+        self.state.input_mode = match self.state.input_mode {
             InputMode::Normal => InputMode::SearchTopic,
             InputMode::SearchTopic => InputMode::Normal,
             _ => InputMode::Normal,
@@ -153,19 +108,20 @@ impl App {
         self.update_filters();
     }
 
-    pub fn clear_search(&mut self) {
-        self.state.topic_search_query.clear();
-        self.state.filtered_topic_state.topics.update_items(self.state.topics.items.clone());
-    }
-
     pub fn update_filters(&mut self) {
         self.state.filtered_topic_state.topics.update_items(
-            self.state.topics.items.iter().filter(|topic| topic.name.contains(&self.state.topic_search_query)).cloned().collect()
+            self.state
+                .topics
+                .items
+                .iter()
+                .filter(|topic| topic.name.contains(&self.state.topic_search_query))
+                .cloned()
+                .collect(),
         );
     }
 
     pub fn start_stats_polling(&self) {
-        let tx = self.tx.clone();
+        let tx = self.state.tx.clone();
         let client = self.repositories.kafka_client.clone();
 
         tokio::spawn(async move {
@@ -181,7 +137,7 @@ impl App {
     }
 
     pub fn load_topics(&self) {
-        let tx = self.tx.clone();
+        let tx = self.state.tx.clone();
         let repo = self.repositories.topics().clone();
 
         tokio::spawn(async move {
@@ -196,12 +152,8 @@ impl App {
         });
     }
 
-    pub fn select_topic(&self, topic: String) {
-        self.tx.send(AppMessage::TopicSelected(topic)).unwrap();
-    }
-
     pub fn load_messages_for_topic(&self, topic: String) {
-        let tx = self.tx.clone();
+        let tx = self.state.tx.clone();
         let repo = self.repositories.messages().clone();
 
         tokio::spawn(async move {
@@ -217,7 +169,7 @@ impl App {
     }
 
     pub fn load_topic_config(&self, topic_name: String) {
-        let tx = self.tx.clone();
+        let tx = self.state.tx.clone();
         let client = self.repositories.kafka_client.clone();
 
         tokio::spawn(async move {
@@ -237,11 +189,12 @@ impl App {
     }
 
     pub fn handle_messages(&mut self) {
-        while let Ok(msg) = self.rx.try_recv() {
+        while let Ok(msg) = self.state.rx.try_recv() {
             match msg {
                 AppMessage::TopicsLoaded(topics) => {
                     self.state.topics = StatefulList::with_items(topics);
-                    self.state.filtered_topic_state.topics = StatefulList::with_items(self.state.topics.items.clone());
+                    self.state.filtered_topic_state.topics =
+                        StatefulList::with_items(self.state.topics.items.clone());
                     if !self.state.topics.items.is_empty() {
                         self.state.topics.state.select(Some(0));
                         self.state.filtered_topic_state.topics.state.select(Some(0));
@@ -260,14 +213,14 @@ impl App {
                     self.state.records = StatefulList::with_items(records);
                 }
                 AppMessage::TopicConfigLoaded(topic_name, config) => {
-                    // Update the topic in the topics list
-                    if let Some(topic) = self.state.topics.items.iter_mut().find(|t| t.name == topic_name) {
+                    if let Some(topic) = self
+                        .state
+                        .topics
+                        .items
+                        .iter_mut()
+                        .find(|t| t.name == topic_name)
+                    {
                         topic.config = Some(config.clone());
-                    }
-
-                    // Update the topic in the filtered list
-                    if let Some(topic) = self.state.filtered_topic_state.topics.items.iter_mut().find(|t| t.name == topic_name) {
-                        topic.config = Some(config);
                     }
                 }
             }
