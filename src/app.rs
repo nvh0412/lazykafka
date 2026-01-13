@@ -5,9 +5,7 @@ use crate::state::app_state::{AppMessage, AppState, InputMode};
 use crate::ui::screen::{AppAction, ConfirmAction, EventResult};
 use crate::ui::screen_manager::ScreenManager;
 use crate::ui::screen_type::ScreenType;
-use crate::{
-    client::KafkaClient, components::stateful_list::StatefulList,
-};
+use crate::{client::KafkaClient, components::stateful_list::StatefulList};
 
 pub struct App {
     pub screen_manager: ScreenManager,
@@ -55,6 +53,10 @@ impl App {
                         },
                         &mut self.state,
                     );
+                    true
+                },
+                AppAction::DeletedTopic(t) =>  {
+                    self.screen_manager.pop(&mut self.state);
                     true
                 }
             },
@@ -159,6 +161,14 @@ impl App {
                     {
                         topic.config = Some(config.clone());
                     }
+                },
+                AppMessage::TopicDeleted(t) => {
+                    self
+                        .state
+                        .topics
+                        .items
+                        .retain_mut(|topic| topic.name != t);
+                    self.state.filtered_topic_state.topics.update_items(self.state.topics.items.clone());
                 }
             }
         }

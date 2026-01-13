@@ -32,6 +32,7 @@ pub enum AppMessage {
     StatsUpdated(BrokerStats),
     MessagesLoaded(Vec<Record>),
     TopicConfigLoaded(String, TopicConfig),
+    TopicDeleted(String),
     Error(String),
 }
 

@@ -28,6 +28,7 @@ pub enum AppAction {
     ToggleSearchMode,
     ClosePopup,
     ConfirmExitApp,
+    DeletedTopic(String),
 }
 pub enum ConfirmAction {
     Accept,

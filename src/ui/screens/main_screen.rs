@@ -266,6 +266,13 @@ impl Screen for MainScreen {
                         EventResult::Handled
                     }
                 }
+                KeyCode::Char('d') => {
+                    if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
+                        EventResult::Push(ScreenType::ConfirmDeleteTopicDialog { topic_name: topic.name.clone() })
+                    } else {
+                        EventResult::Handled
+                    }
+                }
                 KeyCode::Up => {
                     app_state.filtered_topic_state.vertical_scroll = app_state
                         .filtered_topic_state
