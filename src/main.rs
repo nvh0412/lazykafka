@@ -1,24 +1,19 @@
 use ratatui::{
-    Terminal,
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event},
         execute,
-        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
     prelude::{Backend, CrosstermBackend},
+    Terminal,
 };
-use std::time::{Duration, Instant};
 use std::{
     io::{self, Result},
     sync::Arc,
 };
 use tokio::sync::RwLock;
 
-use crate::{
-    app::{App, InputMode},
-    client_builder::ClientBuilder,
-    ui::main_screen::render,
-};
+use crate::{app::App, client_builder::ClientBuilder};
 
 mod app;
 mod client;
@@ -68,46 +63,13 @@ async fn main() -> Result<()> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<bool> {
-    let tick_rate = Duration::from_millis(250);
-    let mut last_tick = Instant::now();
     loop {
-        terminal.draw(|f| render(f, app))?;
-
+        terminal.draw(|f| app.screen_manager.render(f, &mut app.state))?;
         app.handle_messages();
-
-        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-        if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == event::KeyEventKind::Release {
-                    // Skip events that are not KeyEventKind::Press
-                    continue;
-                }
-
-                match app.input_mode {
-                    InputMode::Normal => match key.code {
-                        KeyCode::Char('q') => return Ok(false),
-                        KeyCode::Char('/') => app.toggle_search_mode(),
-                        KeyCode::Up => app.on_up(),
-                        KeyCode::Down => app.on_down(),
-                        KeyCode::Enter => app.on_enter(),
-                        KeyCode::Char('i') => app.show_topic_info(),
-                        _ => {}
-                    },
-                    InputMode::SearchTopic => match key.code {
-                        KeyCode::Char(c) => app.on_search_char(c),
-                        KeyCode::Backspace => app.on_search_backspace(),
-                        KeyCode::Esc => {
-                            app.clear_search();
-                            app.toggle_search_mode();
-                        }
-                        KeyCode::Enter => app.toggle_search_mode(),
-                        _ => {}
-                    },
-                    InputMode::ShowTopicConfig => match key.code {
-                        KeyCode::Esc => app.close_popup(),
-                        _ => {}
-                    },
-                }
+        if let Event::Key(key) = event::read()? {
+            let mut result = app.screen_manager.handle_key(key.code, &mut app.state);
+            if !app.handle_event_result(&mut result) {
+                return Ok(false);
             }
         }
     }
