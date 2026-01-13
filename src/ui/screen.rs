@@ -9,7 +9,7 @@ pub enum EventResult {
     Push(ScreenType),
     Pop,
     Replace(ScreenType),
-    Quit,
+    Quit(ConfirmAction),
     Action(AppAction)
 }
 
@@ -27,4 +27,9 @@ pub enum AppAction {
     SearchTopicBackspace,
     ToggleSearchMode,
     ClosePopup,
+    ConfirmExitApp,
+}
+pub enum ConfirmAction {
+    Accept,
+    Decline,
 }

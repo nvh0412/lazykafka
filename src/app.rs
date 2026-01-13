@@ -1,16 +1,12 @@
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 
 use crate::state::app_state::{AppMessage, AppState, InputMode};
-use crate::ui::screen::{AppAction, EventResult};
+use crate::ui::screen::{AppAction, ConfirmAction, EventResult};
 use crate::ui::screen_manager::ScreenManager;
 use crate::ui::screen_type::ScreenType;
 use crate::{
-    client::KafkaClient,
-    components::stateful_list::StatefulList
-    ,
-    models::topic::TopicConfig,
+    client::KafkaClient, components::stateful_list::StatefulList,
 };
 
 pub struct App {
@@ -51,12 +47,29 @@ impl App {
                     self.on_search_backspace();
                     true
                 }
+                AppAction::ConfirmExitApp => {
+                    self.screen_manager.push(
+                        ScreenType::ConfirmDialog {
+                            title: "Leave app?".to_string(),
+                            message: "Are you sure you want to exit?".to_string(),
+                        },
+                        &mut self.state,
+                    );
+                    true
+                }
             },
             EventResult::Push(screen_type) => {
-                self.screen_manager.push(screen_type.clone(), &mut self.state);
+                self.screen_manager
+                    .push(screen_type.clone(), &mut self.state);
                 true
             }
-            EventResult::Quit => false,
+            EventResult::Quit(confirm_action) => match confirm_action {
+                ConfirmAction::Accept => false,
+                ConfirmAction::Decline => {
+                    self.screen_manager.pop(&mut self.state);
+                    true
+                }
+            },
             _ => true,
         }
     }

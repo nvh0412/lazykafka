@@ -26,15 +26,7 @@ impl TopicDetailModal {
         frame.render_widget(Clear, area);
         frame.render_widget(popup_block, area);
 
-        // Create inner area for the content
-        let inner_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0)])
-            .split(area);
-
         let topic_name = topic.name.clone();
-
-        // Find the topic in the app state
 
         let content = if let Some(config) = &topic.config {
             // Sort config entries by key name for easier reading

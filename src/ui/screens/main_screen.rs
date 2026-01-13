@@ -257,7 +257,7 @@ impl Screen for MainScreen {
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
         match app_state.input_mode {
             InputMode::Normal => match key {
-                KeyCode::Char('q') => EventResult::Quit,
+                KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
                 KeyCode::Char('/') => EventResult::Action(AppAction::ToggleSearchMode),
                 KeyCode::Char('i') => {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
