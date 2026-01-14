@@ -1,10 +1,10 @@
+use crate::state::app_state::AppState;
+use crate::ui::screen::{ConfirmAction, EventResult, Screen};
 use ratatui::crossterm::event::KeyCode;
-use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
-use crate::state::app_state::AppState;
-use crate::ui::screen::{AppAction, ConfirmAction, EventResult, Screen};
+use ratatui::Frame;
 
 pub struct ConfirmDialogModal {
     title: String,
@@ -59,13 +59,13 @@ impl Screen for ConfirmDialogModal {
 
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
         match key {
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
-                EventResult::Quit(ConfirmAction::Accept)
-            },
+            KeyCode::Char('y') | KeyCode::Char('Y') => EventResult::Quit(ConfirmAction::Accept),
             KeyCode::Char('n') | KeyCode::Char('N') => EventResult::Quit(ConfirmAction::Decline),
-            _ => EventResult::Handled
+            _ => EventResult::Handled,
         }
     }
 
-    fn is_modal(&self) -> bool { true }
+    fn is_modal(&self) -> bool {
+        true
+    }
 }

@@ -451,6 +451,14 @@ impl Screen for MainScreen {
                     self.next_record_row();
                     EventResult::Handled
                 }
+                KeyCode::Char('i') => {
+                    if let Some(record_idx) = self.records_table_state.selected() {
+                        let record = app_state.records.items[record_idx].clone();
+                        EventResult::Push(ScreenType::MessageDetail(record))
+                    } else {
+                        EventResult::Handled
+                    }
+                }
                 _ => EventResult::Handled,
             },
         }

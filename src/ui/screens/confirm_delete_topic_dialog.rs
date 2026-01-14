@@ -1,12 +1,10 @@
-use std::fmt::format;
+use crate::state::app_state::{AppMessage, AppState};
+use crate::ui::screen::{AppAction, ConfirmAction, EventResult, Screen};
 use ratatui::crossterm::event::KeyCode;
-use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
-use crate::models::topic::TopicConfig;
-use crate::state::app_state::{AppMessage, AppState};
-use crate::ui::screen::{AppAction, ConfirmAction, EventResult, Screen};
+use ratatui::Frame;
 
 pub struct ConfirmDeleteTopicDialogModal {
     topic_name: String,
@@ -78,9 +76,12 @@ impl Screen for ConfirmDeleteTopicDialogModal {
         let area = self.centered_rect(30, 20, frame.area());
         frame.render_widget(Clear, area);
 
-        let content = Paragraph::new(format!("Are you sure you want to delete {} topic?", self.topic_name))
-            .wrap(Wrap { trim: true })
-            .block(popup_block);
+        let content = Paragraph::new(format!(
+            "Are you sure you want to delete {} topic?",
+            self.topic_name
+        ))
+        .wrap(Wrap { trim: true })
+        .block(popup_block);
 
         frame.render_widget(content, area);
     }
@@ -90,11 +91,13 @@ impl Screen for ConfirmDeleteTopicDialogModal {
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 self.delete_topics(app_state);
                 EventResult::Action(AppAction::DeletedTopic(self.topic_name.clone()))
-            },
+            }
             KeyCode::Char('n') | KeyCode::Char('N') => EventResult::Quit(ConfirmAction::Decline),
-            _ => EventResult::Handled
+            _ => EventResult::Handled,
         }
     }
 
-    fn is_modal(&self) -> bool { true }
+    fn is_modal(&self) -> bool {
+        true
+    }
 }

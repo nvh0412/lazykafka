@@ -1,9 +1,8 @@
-use ratatui::crossterm::event::KeyCode;
-use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Layout};
 use crate::state::app_state::AppState;
 use crate::ui::screen::{EventResult, Screen};
 use crate::ui::screen_type::{create_screen, ScreenType};
+use ratatui::crossterm::event::KeyCode;
+use ratatui::Frame;
 
 pub struct ScreenManager {
     stack: Vec<Box<dyn Screen>>,
@@ -34,13 +33,12 @@ impl ScreenManager {
         self.stack.push(screen);
     }
     pub fn pop(&mut self, app_state: &mut AppState) -> bool {
-        if let(Some(mut screen)) = self.stack.pop() {
+        if let (Some(mut screen)) = self.stack.pop() {
             screen.on_unmount(app_state);
             true
         } else {
             false
         }
-
     }
     pub fn replace(&mut self, screen_type: ScreenType, app_state: &mut AppState) {}
 }
