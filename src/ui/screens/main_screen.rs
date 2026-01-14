@@ -3,6 +3,7 @@ use crate::models::topic::Topic;
 use crate::state::app_state::{AppMessage, AppState, TopicListState};
 use crate::ui::screen::{AppAction, EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
@@ -11,7 +12,6 @@ use ratatui::widgets::{
     Block, Borders, HighlightSpacing, List, ListItem, Paragraph, Row, Scrollbar,
     ScrollbarOrientation, Table, TableState,
 };
-use ratatui::Frame;
 use std::time::Duration;
 
 pub enum InputMode {

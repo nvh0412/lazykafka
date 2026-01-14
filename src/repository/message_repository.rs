@@ -1,12 +1,14 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use crate::client::KafkaClient;
 use crate::error;
 use crate::models::topic::Topic;
 use crate::protocol::fetch::{FetchPartition, FetchTopic};
-use crate::protocol::list_offset::{ListOffsetPartition, ListOffsetPartitionResponse, ListOffsetTopic};
+use crate::protocol::list_offset::{
+    ListOffsetPartition, ListOffsetPartitionResponse, ListOffsetTopic,
+};
 use crate::protocol::record::Record;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct MessageRepository {
@@ -20,12 +22,14 @@ impl MessageRepository {
 
     pub async fn fetch_by_topic(&self, topic: Topic) -> error::Result<Vec<Record>> {
         let mut client = self.kafka_client.write().await;
-        let partitions: Vec<ListOffsetPartition> = topic.partitions.iter().map(|p| {
-            ListOffsetPartition {
+        let partitions: Vec<ListOffsetPartition> = topic
+            .partitions
+            .iter()
+            .map(|p| ListOffsetPartition {
                 partition_index: p.partition,
-                timestamp: 0
-            }
-        }).collect();
+                timestamp: 0,
+            })
+            .collect();
 
         let offset_topics = vec![ListOffsetTopic {
             name: topic.name.clone(),
@@ -38,7 +42,7 @@ impl MessageRepository {
 
         for t in results.topics {
             topic_map.insert(t.name, t.partitions);
-        };
+        }
 
         let mut topics: Vec<FetchTopic> = Vec::new();
 

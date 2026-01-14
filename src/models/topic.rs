@@ -1,7 +1,7 @@
-use crate::protocol::metadata::TopicMetadata;
 use crate::protocol::describe_configs::DescribeConfigsResourceResult;
-use std::collections::HashMap;
 use crate::protocol::metadata::PartitionMetadata;
+use crate::protocol::metadata::TopicMetadata;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct TopicConfig {

@@ -1,8 +1,8 @@
 use crate::state::app_state::AppState;
 use crate::ui::screen::{EventResult, Screen};
-use crate::ui::screen_type::{create_screen, ScreenType};
-use ratatui::crossterm::event::KeyCode;
+use crate::ui::screen_type::{ScreenType, create_screen};
 use ratatui::Frame;
+use ratatui::crossterm::event::KeyCode;
 
 pub struct ScreenManager {
     stack: Vec<Box<dyn Screen>>,

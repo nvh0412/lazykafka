@@ -26,13 +26,18 @@ pub struct Header {
 
 impl Record {
     pub fn ref_array(&self) -> [String; 5] {
-        let key_str = self.key
+        let key_str = self
+            .key
             .as_ref()
             .and_then(|k| String::from_utf8(k.clone()).ok())
             .unwrap_or_else(|| String::from("null"));
 
-        let value_str = String::from_utf8(self.value.clone()).unwrap_or_else(|_| String::from("null"));
-        let partition_str = self.partition.map(|p| p.to_string()).unwrap_or_else(|| String::from("null"));
+        let value_str =
+            String::from_utf8(self.value.clone()).unwrap_or_else(|_| String::from("null"));
+        let partition_str = self
+            .partition
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| String::from("null"));
 
         [
             key_str,
@@ -68,7 +73,9 @@ impl Record {
         let value: Vec<u8> = if value_length < 0 {
             vec![]
         } else {
-            decoder.read_bytes_from_length(value_length)?.unwrap_or(vec![])
+            decoder
+                .read_bytes_from_length(value_length)?
+                .unwrap_or(vec![])
         };
 
         // headers_count uses signed varint (zigzag)
@@ -277,8 +284,8 @@ mod record_tests {
         assert_eq!(record.attributes, 0);
         assert_eq!(record.timestamp_delta, 0);
         assert_eq!(record.offset_delta, 0);
-        assert_eq!(record.key, None);  // null key
-        assert_eq!(record.value, vec![]);  // null value becomes empty vec
+        assert_eq!(record.key, None); // null key
+        assert_eq!(record.value, vec![]); // null value becomes empty vec
         assert_eq!(record.headers.len(), 0);
     }
 

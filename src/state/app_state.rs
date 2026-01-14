@@ -1,14 +1,14 @@
-use std::sync::Arc;
+use crate::client::KafkaClient;
 use crate::components::stateful_list::StatefulList;
 use crate::error::KafkaError;
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 use crate::models::topic::{Topic, TopicConfig};
 use crate::protocol::record::Record;
+use crate::repository::RepositoryManager;
 use crate::state::filter::FilterState;
 use ratatui::widgets::{ScrollbarState, TableState};
-use tokio::sync::{mpsc, RwLock};
-use crate::client::KafkaClient;
-use crate::repository::RepositoryManager;
+use std::sync::Arc;
+use tokio::sync::{RwLock, mpsc};
 
 pub struct TopicListState {
     pub topics: StatefulList<Topic>,
@@ -44,7 +44,7 @@ pub struct AppState {
     pub topic_search_query: String,
     pub rx: mpsc::UnboundedReceiver<AppMessage>,
     pub tx: mpsc::UnboundedSender<AppMessage>,
-    pub repository_manager: RepositoryManager
+    pub repository_manager: RepositoryManager,
 }
 
 impl AppState {
@@ -76,7 +76,7 @@ impl AppState {
             topic_search_query: String::new(),
             tx,
             rx,
-            repository_manager
+            repository_manager,
         }
     }
 }

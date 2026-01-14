@@ -181,8 +181,8 @@ impl DescribeConfigsResponse {
             let error_code = decoder.read_i16()?;
             let error_message = decoder.read_nullable_string()?;
             let resource_type_value = decoder.read_i8()?;
-            let resource_type = ResourceType::from_i8(resource_type_value)
-                .unwrap_or(ResourceType::Topic);
+            let resource_type =
+                ResourceType::from_i8(resource_type_value).unwrap_or(ResourceType::Topic);
             let resource_name = decoder.read_string()?;
 
             let config_count = decoder.read_i32()? as usize;
@@ -202,7 +202,7 @@ impl DescribeConfigsResponse {
                     let synonym_name = decoder.read_string()?;
                     let synonym_value = decoder.read_nullable_string()?;
                     let synonym_source = decoder.read_i8()?;
-                    
+
                     synonyms.push(ConfigSynonym {
                         name: synonym_name,
                         value: synonym_value,

@@ -1,11 +1,11 @@
 use ratatui::{
+    Terminal,
     crossterm::{
         event::{self, DisableMouseCapture, EnableMouseCapture, Event},
         execute,
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
     prelude::{Backend, CrosstermBackend},
-    Terminal,
 };
 use std::{
     io::{self, Result},

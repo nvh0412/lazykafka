@@ -1,8 +1,8 @@
-use ratatui::crossterm::event::KeyCode;
-use ratatui::Frame;
-use ratatui::layout::Rect;
 use crate::state::app_state::AppState;
 use crate::ui::screen_type::ScreenType;
+use ratatui::Frame;
+use ratatui::crossterm::event::KeyCode;
+use ratatui::layout::Rect;
 
 #[allow(dead_code)]
 pub enum EventResult {
@@ -11,7 +11,7 @@ pub enum EventResult {
     Pop,
     Replace(ScreenType),
     Quit(ConfirmAction),
-    Action(AppAction)
+    Action(AppAction),
 }
 
 #[allow(dead_code)]
@@ -20,7 +20,9 @@ pub trait Screen: Send {
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult;
     fn on_mount(&mut self, _app_state: &mut AppState) {}
     fn on_unmount(&mut self, _app_state: &mut AppState) {}
-    fn is_modal(&self) -> bool { false }
+    fn is_modal(&self) -> bool {
+        false
+    }
 }
 
 pub enum AppAction {

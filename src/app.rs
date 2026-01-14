@@ -38,8 +38,8 @@ impl App {
                         &mut self.state,
                     );
                     true
-                },
-                AppAction::DeletedTopic(_t) =>  {
+                }
+                AppAction::DeletedTopic(_t) => {
                     self.screen_manager.pop(&mut self.state);
                     true
                 }
@@ -95,14 +95,13 @@ impl App {
                     {
                         topic.config = Some(config.clone());
                     }
-                },
+                }
                 AppMessage::TopicDeleted(t) => {
-                    self
-                        .state
+                    self.state.topics.items.retain_mut(|topic| topic.name != t);
+                    self.state
+                        .filtered_topic_state
                         .topics
-                        .items
-                        .retain_mut(|topic| topic.name != t);
-                    self.state.filtered_topic_state.topics.update_items(self.state.topics.items.clone());
+                        .update_items(self.state.topics.items.clone());
                 }
             }
         }

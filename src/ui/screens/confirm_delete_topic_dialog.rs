@@ -1,10 +1,10 @@
 use crate::state::app_state::{AppMessage, AppState};
 use crate::ui::screen::{AppAction, ConfirmAction, EventResult, Screen};
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
-use ratatui::Frame;
 
 pub struct ConfirmDeleteTopicDialogModal {
     topic_name: String,

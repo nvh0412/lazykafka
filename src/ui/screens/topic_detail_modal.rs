@@ -1,12 +1,12 @@
-use ratatui::crossterm::event::KeyCode;
+use crate::models::topic::{Topic, TopicConfig};
+use crate::state::app_state::{AppMessage, AppState, TopicInfoState};
+use crate::ui::screen::AppAction::ClosePopup;
+use crate::ui::screen::{EventResult, Screen};
 use ratatui::Frame;
+use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::prelude::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Clear, Row, Scrollbar, ScrollbarOrientation, Table};
-use crate::models::topic::{Topic, TopicConfig};
-use crate::state::app_state::{AppMessage, AppState, TopicInfoState};
-use crate::ui::screen::{EventResult, Screen};
-use crate::ui::screen::AppAction::ClosePopup;
 
 pub struct TopicDetailModal {
     topic_name: String,
@@ -14,12 +14,15 @@ pub struct TopicDetailModal {
 
 impl TopicDetailModal {
     pub fn new(topic_name: String) -> Self {
-        Self {
-            topic_name
-        }
+        Self { topic_name }
     }
 
-    fn render_topic_popup(&self, frame: &mut Frame, topic: &Topic, topic_info_state: &mut TopicInfoState) {
+    fn render_topic_popup(
+        &self,
+        frame: &mut Frame,
+        topic: &Topic,
+        topic_info_state: &mut TopicInfoState,
+    ) {
         let popup_block = Block::default().borders(Borders::NONE);
 
         let area = self.centered_rect(60, 60, frame.area());
@@ -47,39 +50,39 @@ impl TopicDetailModal {
                 rows,
                 [Constraint::Percentage(50), Constraint::Percentage(50)],
             )
-                .header(
-                    Row::new(vec![
-                        Cell::from("Config Key").style(Style::default().add_modifier(Modifier::BOLD)),
-                        Cell::from("Value").style(Style::default().add_modifier(Modifier::BOLD)),
-                    ])
-                        .style(Style::default().fg(Color::Yellow))
-                        .bottom_margin(1),
-                )
-                .block(
-                    Block::default()
-                        .title(format!(
-                            "Topic Configuration: {} (Press Esc to close)",
-                            topic_name
-                        ))
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Cyan)),
-                )
-                .style(Style::default().fg(Color::White))
+            .header(
+                Row::new(vec![
+                    Cell::from("Config Key").style(Style::default().add_modifier(Modifier::BOLD)),
+                    Cell::from("Value").style(Style::default().add_modifier(Modifier::BOLD)),
+                ])
+                .style(Style::default().fg(Color::Yellow))
+                .bottom_margin(1),
+            )
+            .block(
+                Block::default()
+                    .title(format!(
+                        "Topic Configuration: {} (Press Esc to close)",
+                        topic_name
+                    ))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+            .style(Style::default().fg(Color::White))
         } else {
             // Config is loading
             Table::new(
                 vec![Row::new(vec![Cell::from("Loading configuration...")])],
                 [Constraint::Percentage(100)],
             )
-                .block(
-                    Block::default()
-                        .title(format!(
-                            "Topic Configuration: {} (Press Esc to close)",
-                            topic_name
-                        ))
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Cyan)),
-                )
+            .block(
+                Block::default()
+                    .title(format!(
+                        "Topic Configuration: {} (Press Esc to close)",
+                        topic_name
+                    ))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
         };
 
         frame.render_stateful_widget(content, area, &mut topic_info_state.table_state);
@@ -137,12 +140,16 @@ impl TopicDetailModal {
             }
         });
     }
-
 }
 
 impl Screen for TopicDetailModal {
     fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
-        if let Some(topic) = app_state.topics.items.iter().find(|topic| topic.name == self.topic_name) {
+        if let Some(topic) = app_state
+            .topics
+            .items
+            .iter()
+            .find(|topic| topic.name == self.topic_name)
+        {
             self.render_topic_popup(frame, topic, &mut app_state.topic_info_state)
         } else {
             let popup_area = self.centered_rect(80, 80, area);
@@ -157,7 +164,7 @@ impl Screen for TopicDetailModal {
     fn handle_key(&mut self, key: KeyCode, _app_state: &mut AppState) -> EventResult {
         match key {
             KeyCode::Esc => EventResult::Action(ClosePopup),
-            _ => EventResult::Handled
+            _ => EventResult::Handled,
         }
     }
 
