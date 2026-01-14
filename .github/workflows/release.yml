@@ -1,0 +1,205 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: kafkatui-rs
+            asset_name: kafkatui-rs-linux-x86_64
+            use_cross: false
+
+          # Linux x86_64 (musl - static binary)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: kafkatui-rs
+            asset_name: kafkatui-rs-linux-x86_64-musl
+            use_cross: true
+
+          # Linux ARM64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: kafkatui-rs
+            asset_name: kafkatui-rs-linux-arm64
+            use_cross: true
+
+          # Linux ARM64 (musl - static binary)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            artifact_name: kafkatui-rs
+            asset_name: kafkatui-rs-linux-arm64-musl
+            use_cross: true
+
+          # macOS x86_64 (Intel)
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: kafkatui-rs
+            asset_name: kafkatui-rs-macos-x86_64
+            use_cross: false
+
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: kafkatui-rs
+            asset_name: kafkatui-rs-macos-arm64
+            use_cross: false
+
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: kafkatui-rs.exe
+            asset_name: kafkatui-rs-windows-x86_64.exe
+            use_cross: false
+
+          # Windows ARM64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact_name: kafkatui-rs.exe
+            asset_name: kafkatui-rs-windows-arm64.exe
+            use_cross: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build binary
+        run: |
+          if [ "${{ matrix.use_cross }}" == "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
+
+      - name: Strip binary (Linux and macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }} || true
+
+      - name: Create archive
+        id: archive
+        run: |
+          mkdir -p artifacts
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.asset_name }}
+            echo "archive_path=artifacts/${{ matrix.asset_name }}" >> $GITHUB_OUTPUT
+          else
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.asset_name }}
+            echo "archive_path=artifacts/${{ matrix.asset_name }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Generate checksum
+        run: |
+          cd artifacts
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            certutil -hashfile ${{ matrix.asset_name }} SHA256 > ${{ matrix.asset_name }}.sha256
+          else
+            shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          fi
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: artifacts/*
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-artifacts
+          find artifacts -type f -exec mv {} release-artifacts/ \;
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # Get the tag name
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # Generate changelog
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s" --no-merges)
+          else
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+          fi
+
+          # Create release notes
+          cat << EOF > release_notes.md
+          ## What's Changed
+
+          ${CHANGELOG}
+
+          ## Installation
+
+          Download the appropriate binary for your platform from the assets below.
+
+          ### Linux / macOS
+          \`\`\`bash
+          # Download the binary (replace with your platform)
+          # Make it executable
+          chmod +x kafkatui-rs-*
+          # Move to a directory in your PATH
+          sudo mv kafkatui-rs-* /usr/local/bin/kafkatui-rs
+          \`\`\`
+
+          ### Windows
+          Download the .exe file and add it to your PATH.
+
+          ## Checksums
+          SHA256 checksums are provided for all binaries to verify integrity.
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-artifacts/*
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
