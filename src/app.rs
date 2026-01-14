@@ -25,10 +25,6 @@ impl App {
     pub fn handle_event_result(&mut self, event_result: &mut EventResult) -> bool {
         match event_result {
             EventResult::Action(action) => match action {
-                AppAction::LoadMessages(topic) => {
-                    self.load_messages_for_topic(topic.clone());
-                    true
-                }
                 AppAction::ClosePopup => {
                     self.close_popup();
                     true
@@ -68,22 +64,6 @@ impl App {
         self.screen_manager.pop(&mut self.state);
     }
 
-    pub fn load_messages_for_topic(&self, topic: String) {
-        let tx = self.state.tx.clone();
-        let repo = self.state.repository_manager.messages().clone();
-
-        tokio::spawn(async move {
-            match repo.fetch_by_topic(topic).await {
-                Ok(records) => {
-                    let _ = tx.send(AppMessage::MessagesLoaded(records));
-                }
-                Err(e) => {
-                    let _ = tx.send(AppMessage::Error(e.to_string()));
-                }
-            }
-        });
-    }
-
     pub fn handle_messages(&mut self) {
         while let Ok(msg) = self.state.rx.try_recv() {
             match msg {
@@ -95,9 +75,6 @@ impl App {
                         self.state.topics.state.select(Some(0));
                         self.state.filtered_topic_state.topics.state.select(Some(0));
                     }
-                }
-                AppMessage::TopicSelected(name) => {
-                    self.load_messages_for_topic(name);
                 }
                 AppMessage::StatsUpdated(stats) => {
                     self.state.broker_stats = stats;

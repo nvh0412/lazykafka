@@ -22,7 +22,6 @@ pub trait Screen: Send {
 }
 
 pub enum AppAction {
-    LoadMessages(String),
     ClosePopup,
     ConfirmExitApp,
     DeletedTopic(String),

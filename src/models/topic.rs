@@ -1,6 +1,7 @@
 use crate::protocol::metadata::TopicMetadata;
 use crate::protocol::describe_configs::DescribeConfigsResourceResult;
 use std::collections::HashMap;
+use crate::protocol::metadata::PartitionMetadata;
 
 #[derive(Debug, Clone)]
 pub struct TopicConfig {
@@ -79,23 +80,42 @@ impl Default for TopicConfig {
 #[derive(Debug, Clone)]
 pub struct Topic {
     pub name: String,
-    pub partitions: usize,
+    pub partitions: Vec<TopicPartition>,
     pub replication_factor: u16,
     pub config: Option<TopicConfig>,
     // pub metrics: TopicMetrics,
+}
+
+#[derive(Debug, Clone)]
+pub struct TopicPartition {
+    pub partition: i32,
+    pub leader: i32,
+    pub replicas: Vec<i32>,
+    pub isr: Vec<i32>,
 }
 
 impl From<&TopicMetadata> for Topic {
     fn from(value: &TopicMetadata) -> Self {
         Self {
             name: value.topic_name.clone(),
-            partitions: value.partitions.len(),
+            partitions: value.partitions.iter().map(|p| p.into()).collect(),
             replication_factor: value
                 .partitions
                 .first()
                 .map(|p| p.replicas.len() as u16)
                 .unwrap_or(0),
             config: None,
+        }
+    }
+}
+
+impl From<&PartitionMetadata> for TopicPartition {
+    fn from(value: &PartitionMetadata) -> Self {
+        Self {
+            partition: value.partition_id,
+            leader: value.leader,
+            replicas: value.replicas.clone(),
+            isr: value.isr.clone(),
         }
     }
 }

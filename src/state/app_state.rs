@@ -23,7 +23,6 @@ pub struct TopicInfoState {
 
 pub enum AppMessage {
     TopicsLoaded(Vec<Topic>),
-    TopicSelected(String),
     StatsUpdated(BrokerStats),
     MessagesLoaded(Vec<Record>),
     TopicConfigLoaded(String, TopicConfig),

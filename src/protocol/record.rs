@@ -3,6 +3,7 @@ use crate::{
     protocol::{ProtocolResponse, message_decoder::MessageDecoder},
 };
 
+#[derive(Debug, Clone)]
 pub struct Record {
     pub length: i64, // varint
     pub attributes: i8,
@@ -12,6 +13,7 @@ pub struct Record {
     pub key: Option<Vec<u8>>,
     pub value: Vec<u8>,
     pub headers: Vec<Header>,
+    pub partition: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -21,6 +23,24 @@ pub struct Header {
 }
 
 impl Record {
+    pub fn ref_array(&self) -> [String; 5] {
+        let key_str = self.key
+            .as_ref()
+            .and_then(|k| String::from_utf8(k.clone()).ok())
+            .unwrap_or_else(|| String::from("null"));
+
+        let value_str = String::from_utf8(self.value.clone()).unwrap_or_else(|_| String::from("null"));
+        let partition_str = self.partition.map(|p| p.to_string()).unwrap_or_else(|| String::from("null"));
+
+        [
+            key_str,
+            partition_str,
+            self.timestamp_delta.to_string(),
+            self.offset_delta.to_string(),
+            value_str,
+        ]
+    }
+
     /// Decode record from batch format (length already read as prefix)
     /// In Kafka Record Batch Format v2, records use zigzag encoding for lengths
     pub fn decode_from_batch(decoder: &mut MessageDecoder, length: i64) -> Result<Self> {
@@ -82,6 +102,7 @@ impl Record {
             key,
             value,
             headers,
+            partition: None,
         })
     }
 
@@ -236,7 +257,7 @@ mod record_tests {
 
     #[test]
     fn test_record_decode_minimal() {
-        // Minimal record with null key, empty value, no headers (batch format with zigzag)
+        // Minimal record with a null key, empty value, no headers (batch format with zigzag)
         let data = vec![
             0x10, // length (varint: 16)
             0x00, // attributes (i8: 0)

@@ -1,4 +1,3 @@
-use std::time::Duration;
 use crate::models::broker_stats::ConnectionStatus;
 use crate::state::app_state::{AppMessage, AppState, TopicListState};
 use crate::ui::screen::{AppAction, EventResult, Screen};
@@ -6,10 +5,15 @@ use crate::ui::screen_type::ScreenType;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
+use ratatui::text::Text;
 use ratatui::widgets::{
-    Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation,
+    Block, Borders, HighlightSpacing, List, ListItem, Padding, Paragraph, Row, Scrollbar,
+    ScrollbarOrientation, Table, TableState,
 };
 use ratatui::Frame;
+use std::time::Duration;
+use ratatui::style::Stylize;
+use crate::models::topic::Topic;
 
 pub enum InputMode {
     SelectTopic,
@@ -19,12 +23,14 @@ pub enum InputMode {
 
 pub struct MainScreen {
     input_mode: InputMode,
+    records_table_state: TableState,
 }
 
 impl MainScreen {
     pub fn new() -> Self {
         Self {
             input_mode: InputMode::SelectTopic,
+            records_table_state: TableState::default().with_selected(0),
         }
     }
 
@@ -83,7 +89,7 @@ impl MainScreen {
         }
     }
 
-    fn render_body(&self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+    fn render_body(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
         let body = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -150,7 +156,7 @@ impl MainScreen {
                 let line = Line::from(vec![
                     Span::raw(&topic.name),
                     Span::styled(
-                        format!(" [{}p]", topic.partitions),
+                        format!(" [{}p]", topic.partitions.len()),
                         Style::default().fg(Color::DarkGray),
                     ),
                 ]);
@@ -191,27 +197,62 @@ impl MainScreen {
         );
     }
 
-    fn render_messages_panel(&self, frame: &mut Frame, area: Rect, app_state: &AppState) {
-        let items: Vec<ListItem> = app_state
-            .records
-            .items
-            .iter()
-            .map(|r| ListItem::new(format!("{}", String::from_utf8(r.value.clone()).unwrap())))
-            .collect();
+    fn next_record_row(&mut self) {
+        let i = self.records_table_state.selected().unwrap_or_else(|| 0);
+        self.records_table_state.select(Some(i.saturating_add(1)));
+    }
 
+    fn previous_record_row(&mut self) {
+        let i = self.records_table_state.selected().unwrap_or_else(|| 0);
+        self.records_table_state.select(Some(i.saturating_sub(1)));
+    }
+
+    fn render_messages_panel(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+        let rows = app_state.records.items.iter().enumerate().map(|(i, data)| {
+            let item = data.ref_array();
+            item.into_iter()
+                .map(|content| ratatui::widgets::Cell::from(format!("\n{content}\n")))
+                .collect::<Row>()
+                .height(4)
+        });
 
         let list_style = match self.input_mode {
             InputMode::ViewRecords => Style::default().fg(Color::White),
             _ => Style::default().fg(Color::Gray),
         };
 
-        let list = List::new(items).block(
-            Block::default()
+        let header_style = Style::default().bg(Color::Cyan);
+
+        let header = ["Key", "Partition", "Timestamp", "Offset", "Value"]
+            .into_iter()
+            .map(ratatui::widgets::Cell::from)
+            .collect::<Row>()
+            .style(header_style)
+            .height(1);
+
+        let selected_row_style = Style::default()
+            .add_modifier(Modifier::REVERSED)
+            .fg(Color::Black)
+            .bg(Color::White);
+
+        let bar = " █ ";
+
+        let t = Table::new::<_, [Constraint; 0]>(rows, [])
+            .block(Block::default().borders(Borders::ALL)
                 .title("Records")
-                .borders(Borders::ALL)
-                .border_style(list_style),
-        );
-        frame.render_widget(list, area);
+                .border_style(list_style)
+            )
+            .header(header)
+            .row_highlight_style(selected_row_style)
+            .highlight_symbol(Text::from(vec![
+                "".into(),
+                bar.into(),
+                bar.into(),
+                "".into(),
+            ]))
+            .highlight_spacing(HighlightSpacing::Always);
+
+        frame.render_stateful_widget(t, area, &mut self.records_table_state);
     }
 
     fn render_footer(&self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {}
@@ -278,6 +319,22 @@ impl MainScreen {
         app_state.topic_search_query.clear();
         self.update_filters(app_state);
     }
+
+    pub fn load_messages_for_topic(&self, topic: Topic, app_state: &mut AppState) {
+        let tx = app_state.tx.clone();
+        let repo = app_state.repository_manager.messages().clone();
+
+        tokio::spawn(async move {
+            match repo.fetch_by_topic(topic).await {
+                Ok(records) => {
+                    let _ = tx.send(AppMessage::MessagesLoaded(records));
+                }
+                Err(e) => {
+                    let _ = tx.send(AppMessage::Error(e.to_string()));
+                }
+            }
+        });
+    }
 }
 
 impl Screen for MainScreen {
@@ -308,7 +365,7 @@ impl Screen for MainScreen {
                 KeyCode::Char('/') => {
                     self.switch_view_mode(InputMode::SearchTopic);
                     EventResult::Handled
-                },
+                }
                 KeyCode::Char('i') => {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
                         EventResult::Push(ScreenType::TopicDetail(topic.name.clone()))
@@ -318,7 +375,9 @@ impl Screen for MainScreen {
                 }
                 KeyCode::Char('d') => {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
-                        EventResult::Push(ScreenType::ConfirmDeleteTopicDialog { topic_name: topic.name.clone() })
+                        EventResult::Push(ScreenType::ConfirmDeleteTopicDialog {
+                            topic_name: topic.name.clone(),
+                        })
                     } else {
                         EventResult::Handled
                     }
@@ -349,48 +408,51 @@ impl Screen for MainScreen {
                 }
                 KeyCode::Enter => {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
-                        app_state
-                            .tx
-                            .send(AppMessage::TopicSelected(topic.name.clone()))
-                            .unwrap();
-                        EventResult::Action(AppAction::LoadMessages(topic.name.clone()))
-                    } else {
-                        EventResult::Handled
+                        self.load_messages_for_topic(topic.clone(), app_state);
                     }
+                    EventResult::Handled
                 }
                 KeyCode::Tab => {
                     self.switch_view_mode(InputMode::ViewRecords);
                     EventResult::Handled
-                },
+                }
                 _ => EventResult::Handled,
             },
             InputMode::SearchTopic => match key {
                 KeyCode::Char(c) => {
                     self.on_search_char(c, app_state);
                     EventResult::Handled
-                },
+                }
                 KeyCode::Backspace => {
                     self.on_search_backspace(app_state);
                     EventResult::Handled
-                },
+                }
                 KeyCode::Esc => {
                     self.on_reset_filters(app_state);
                     self.switch_view_mode(InputMode::SelectTopic);
                     EventResult::Handled
-                },
+                }
                 KeyCode::Enter => {
                     self.switch_view_mode(InputMode::SelectTopic);
                     EventResult::Handled
-                },
+                }
                 _ => EventResult::Handled,
             },
             InputMode::ViewRecords => match key {
                 KeyCode::Esc | KeyCode::Tab => {
                     self.switch_view_mode(InputMode::SelectTopic);
                     EventResult::Handled
-                },
+                }
+                KeyCode::Up => {
+                    self.previous_record_row();
+                    EventResult::Handled
+                }
+                KeyCode::Down => {
+                    self.next_record_row();
+                    EventResult::Handled
+                }
                 _ => EventResult::Handled,
-            }
+            },
         }
     }
 }

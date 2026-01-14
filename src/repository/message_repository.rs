@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::client::KafkaClient;
 use crate::error;
+use crate::models::topic::Topic;
 use crate::protocol::fetch::{FetchPartition, FetchTopic};
 use crate::protocol::list_offset::{ListOffsetPartition, ListOffsetPartitionResponse, ListOffsetTopic};
 use crate::protocol::record::Record;
@@ -17,15 +18,18 @@ impl MessageRepository {
         Self { kafka_client }
     }
 
-    pub async fn fetch_by_topic(&self, topic: String) -> error::Result<Vec<Record>> {
+    pub async fn fetch_by_topic(&self, topic: Topic) -> error::Result<Vec<Record>> {
         let mut client = self.kafka_client.write().await;
+        let partitions: Vec<ListOffsetPartition> = topic.partitions.iter().map(|p| {
+            ListOffsetPartition {
+                partition_index: p.partition,
+                timestamp: 0
+            }
+        }).collect();
 
         let offset_topics = vec![ListOffsetTopic {
-            name: topic,
-            partitions: vec![ListOffsetPartition {
-                partition_index: 0,
-                timestamp: 0,
-            }],
+            name: topic.name.clone(),
+            partitions,
         }];
 
         let mut topic_map: HashMap<String, Vec<ListOffsetPartitionResponse>> = HashMap::new();
@@ -59,7 +63,9 @@ impl MessageRepository {
             for p in topic_r.paritions {
                 for batch in p.records {
                     for r in batch.records {
-                        records.push(r);
+                        let mut record = r.clone();
+                        record.partition = Some(p.partition_index);
+                        records.push(record);
                     }
                 }
             }
