@@ -42,7 +42,7 @@ impl RecordDetailModal {
 }
 
 impl Screen for RecordDetailModal {
-    fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+    fn render(&mut self, frame: &mut Frame, _area: Rect, _app_state: &mut AppState) {
         let popup_block = Block::default().title("Record Detail").borders(Borders::ALL);
 
         let area = self.centered_rect(60, 60, frame.area());
@@ -53,7 +53,7 @@ impl Screen for RecordDetailModal {
         frame.render_widget(content, area);
     }
 
-    fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
+    fn handle_key(&mut self, key: KeyCode, _app_state: &mut AppState) -> EventResult {
         match key {
             KeyCode::Esc => EventResult::Action(ClosePopup),
             _ => EventResult::Handled

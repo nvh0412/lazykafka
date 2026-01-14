@@ -23,7 +23,7 @@ impl TopicRepository {
             .topics
             .iter()
             .filter(|t| !t.topic_name.starts_with('_'))
-            .map(|t| Topic::from(t))
+            .map(Topic::from)
             .collect();
 
         Ok(topics)

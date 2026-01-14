@@ -12,6 +12,7 @@ pub struct MessageDecoder<'a> {
     pos: usize,
 }
 
+#[allow(dead_code)]
 impl<'a> MessageDecoder<'a> {
     pub fn new(data: &'a [u8]) -> Self {
         Self { data, pos: 0 }
@@ -26,6 +27,7 @@ impl<'a> MessageDecoder<'a> {
         self.data.len() - self.pos
     }
 
+    #[allow(dead_code)]
     /// Peak at bytes without advancing position (for debugging)
     pub fn peek(&self, count: usize) -> &[u8] {
         let end = std::cmp::min(self.pos + count, self.data.len());
@@ -168,7 +170,7 @@ impl<'a> MessageDecoder<'a> {
     pub fn read_varint_zigzag(&mut self) -> Result<i64> {
         let unsigned = self.read_varint()?;
         // Zigzag decode: (n >> 1) ^ -(n & 1)
-        Ok((unsigned >> 1) as i64 ^ -((unsigned & 1) as i64))
+        Ok((unsigned >> 1) ^ -(unsigned & 1))
     }
 
     pub fn read_string(&mut self) -> Result<String> {
@@ -264,8 +266,8 @@ mod decoder_tests {
         let data = vec![0x01, 0x00];
         let mut dec = MessageDecoder::new(&data);
 
-        assert_eq!(dec.read_bool().unwrap(), true);
-        assert_eq!(dec.read_bool().unwrap(), false);
+        assert!(dec.read_bool().unwrap());
+        assert!(dec.read_bool().unwrap());
     }
 
     #[test]

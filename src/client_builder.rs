@@ -17,6 +17,7 @@ impl Default for ClientBuilder {
     }
 }
 
+#[allow(dead_code)]
 impl ClientBuilder {
     pub fn new() -> Self {
         Self {
@@ -55,6 +56,7 @@ impl ClientBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn retry_backoff(mut self, backoff: Duration) -> Self {
         self.config.retry_backoff = backoff;
         self

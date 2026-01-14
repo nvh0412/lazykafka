@@ -32,6 +32,7 @@ pub struct DescribeConfigsResource {
     pub config_names: Option<Vec<String>>,
 }
 
+#[allow(dead_code)]
 impl DescribeConfigsResource {
     pub fn new(resource_type: ResourceType, resource_name: String) -> Self {
         Self {
@@ -54,6 +55,7 @@ impl DescribeConfigsResource {
     }
 }
 
+#[allow(dead_code)]
 pub struct DescribeConfigsRequest {
     pub correlation_id: i32,
     pub resources: Vec<DescribeConfigsResource>,
@@ -61,6 +63,7 @@ pub struct DescribeConfigsRequest {
     pub include_documentation: bool,
 }
 
+#[allow(dead_code)]
 impl DescribeConfigsRequest {
     pub fn new(correlation_id: i32, resources: Vec<DescribeConfigsResource>) -> Self {
         Self {
@@ -126,12 +129,14 @@ impl DescribeConfigsRequest {
     }
 }
 
+#[allow(dead_code)]
 pub struct DescribeConfigsResponse {
     pub correlation_id: i32,
     pub throttle_time_ms: i32,
     pub resources: Vec<DescribeConfigsResourceResult>,
 }
 
+#[allow(dead_code)]
 pub struct DescribeConfigsResourceResult {
     pub error_code: i16,
     pub error_message: Option<String>,
@@ -140,6 +145,7 @@ pub struct DescribeConfigsResourceResult {
     pub configs: Vec<ConfigEntry>,
 }
 
+#[allow(dead_code)]
 pub struct ConfigEntry {
     pub name: String,
     pub value: Option<String>,
@@ -151,6 +157,7 @@ pub struct ConfigEntry {
     pub documentation: Option<String>,
 }
 
+#[allow(dead_code)]
 pub struct ConfigSynonym {
     pub name: String,
     pub value: Option<String>,
@@ -170,7 +177,7 @@ impl DescribeConfigsResponse {
         let resource_count = decoder.read_i32()? as usize;
         let mut resources = Vec::with_capacity(resource_count);
 
-        for i in 0..resource_count {
+        for _ in 0..resource_count {
             let error_code = decoder.read_i16()?;
             let error_message = decoder.read_nullable_string()?;
             let resource_type_value = decoder.read_i8()?;

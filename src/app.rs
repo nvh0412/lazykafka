@@ -39,7 +39,7 @@ impl App {
                     );
                     true
                 },
-                AppAction::DeletedTopic(t) =>  {
+                AppAction::DeletedTopic(_t) =>  {
                     self.screen_manager.pop(&mut self.state);
                     true
                 }
@@ -79,7 +79,7 @@ impl App {
                 AppMessage::StatsUpdated(stats) => {
                     self.state.broker_stats = stats;
                 }
-                AppMessage::Error(err) => {
+                AppMessage::Error(_err) => {
                     // self.state.error = Some(err);
                 }
                 AppMessage::MessagesLoaded(records) => {

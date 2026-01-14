@@ -9,6 +9,7 @@ pub struct TopicConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ConfigValue {
     pub value: Option<String>,
     pub is_sensitive: bool,
@@ -59,6 +60,7 @@ impl From<&DescribeConfigsResourceResult> for TopicConfig {
     }
 }
 
+#[allow(dead_code)]
 impl TopicConfig {
     pub fn new() -> Self {
         Self {
@@ -78,6 +80,7 @@ impl Default for TopicConfig {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Topic {
     pub name: String,
     pub partitions: Vec<TopicPartition>,
@@ -87,6 +90,7 @@ pub struct Topic {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TopicPartition {
     pub partition: i32,
     pub leader: i32,

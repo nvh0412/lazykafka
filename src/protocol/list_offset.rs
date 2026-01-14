@@ -76,6 +76,7 @@ pub struct ListOffsetTopicResponse {
     pub partitions: Vec<ListOffsetPartitionResponse>,
 }
 
+#[allow(dead_code)]
 pub struct ListOffsetPartitionResponse {
     pub partition_index: i32,
     pub error_code: i16,

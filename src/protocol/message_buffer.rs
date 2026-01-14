@@ -11,6 +11,13 @@ pub struct MessageBuffer {
     data: Vec<u8>,
 }
 
+impl Default for MessageBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(dead_code)]
 impl MessageBuffer {
     pub fn new() -> Self {
         Self { data: Vec::new() }

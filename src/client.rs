@@ -2,12 +2,12 @@ use std::time::Duration;
 
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 
+use crate::protocol::delete_topics::{DeleteTopicsRequest, DeleteTopicsResponse};
 use crate::protocol::describe_configs::{
     DescribeConfigsRequest, DescribeConfigsResource, DescribeConfigsResponse, ResourceType,
 };
 use crate::protocol::fetch::{FetchRequest, FetchResponse, FetchTopic};
 use crate::protocol::list_offset::{ListOffsetRequest, ListOffsetResponse, ListOffsetTopic};
-use crate::protocol::offset_fetch::{OffsetFetchRequest, OffsetFetchResponse, OffsetFetchTopic};
 use crate::protocol::{ProtocolRequest, ProtocolResponse};
 use crate::{
     connection::KafkaConnection,
@@ -17,9 +17,9 @@ use crate::{
         metadata::{MetadataRequest, MetadataResponse},
     },
 };
-use crate::protocol::delete_topics::{DeleteTopicsRequest, DeleteTopicsResponse};
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct ClientConfig {
     pub client_id: String,
     pub request_timeout: Duration,
@@ -39,7 +39,7 @@ impl Default for ClientConfig {
         }
     }
 }
-
+#[allow(dead_code)]
 pub struct KafkaClient {
     pub connection: KafkaConnection,
     pub config: ClientConfig,
@@ -61,6 +61,7 @@ impl KafkaClient {
     }
 
     /// Get API versions supported by broker
+    #[allow(dead_code)]
     pub async fn get_api_versions(&mut self) -> Result<ApiVersionsResponse> {
         let correlation_id = self.connection.next_correlation_id();
         let request = ApiVersionRequest::new(correlation_id);
@@ -132,33 +133,6 @@ impl KafkaClient {
         Ok(response)
     }
 
-    /// Offset Fetch messages
-    pub async fn fetch_offsets(
-        &mut self,
-        topics: Vec<OffsetFetchTopic>,
-    ) -> Result<OffsetFetchResponse> {
-        let correlation_id = self.connection.next_correlation_id();
-        let request = OffsetFetchRequest::new(correlation_id, String::from("group-id"), topics);
-
-        self.connection.send_request(&request.encode()).await?;
-
-        let response_bytes =
-            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
-                .await
-                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
-
-        let response = OffsetFetchResponse::decode(&response_bytes)?;
-
-        if response.correlation_id != correlation_id {
-            return Err(KafkaError::InvalidResponse {
-                expected: format!("correlation_id: {}", correlation_id),
-                actual: format!("correlation_id: {}", response.correlation_id),
-            });
-        }
-
-        Ok(response)
-    }
-
     /// List Offsets
     pub async fn list_offsets(
         &mut self,
@@ -187,7 +161,10 @@ impl KafkaClient {
     }
 
     /// Fetch topic configurations
-    pub async fn fetch_topic_configs(&mut self, topic_name: String) -> Result<DescribeConfigsResponse> {
+    pub async fn fetch_topic_configs(
+        &mut self,
+        topic_name: String,
+    ) -> Result<DescribeConfigsResponse> {
         let correlation_id = self.connection.next_correlation_id();
 
         let resource = DescribeConfigsResource::new(ResourceType::Topic, topic_name);
@@ -212,7 +189,10 @@ impl KafkaClient {
         Ok(response)
     }
 
-    pub async fn delete_topics(&mut self, topic_names: Vec<String>) -> Result<DeleteTopicsResponse> {
+    pub async fn delete_topics(
+        &mut self,
+        topic_names: Vec<String>,
+    ) -> Result<DeleteTopicsResponse> {
         let correlation_id = self.connection.next_correlation_id();
 
         let resource = DeleteTopicsRequest::new(correlation_id, topic_names, 100);
@@ -237,6 +217,7 @@ impl KafkaClient {
     }
 
     /// Disconnect gracefully
+    #[allow(dead_code)]
     pub async fn disconnect(&mut self) -> Result<()> {
         self.connection.disconnect().await
     }

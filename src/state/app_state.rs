@@ -30,6 +30,7 @@ pub enum AppMessage {
     Error(String),
 }
 
+#[allow(dead_code)]
 pub struct AppState {
     pub topics: StatefulList<Topic>,
     pub filtered_topic_state: TopicListState,

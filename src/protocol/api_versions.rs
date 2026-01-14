@@ -10,6 +10,7 @@ pub struct ApiVersionRequest {
     pub correlation_id: i32,
 }
 
+#[allow(dead_code)]
 impl ApiVersionRequest {
     // TODO: allow client to pass client_id
     pub fn new(correlation_id: i32) -> Self {
@@ -34,6 +35,7 @@ impl ApiVersionRequest {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ApiVersion {
     pub api_key: i16,
@@ -41,6 +43,7 @@ pub struct ApiVersion {
     pub max_version: i16,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ApiVersionsResponse {
     pub correlation_id: i32,
@@ -48,6 +51,7 @@ pub struct ApiVersionsResponse {
     pub api_versions: Vec<ApiVersion>,
 }
 
+#[allow(dead_code)]
 impl ApiVersionsResponse {
     pub fn decode(data: &[u8]) -> Result<Self> {
         let mut decoder = MessageDecoder::new(data);

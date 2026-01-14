@@ -169,6 +169,7 @@ impl KafkaConnection {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn disconnect(&mut self) -> Result<()> {
         if let Some(mut stream) = self.stream.take() {
             stream.shutdown().await?;
@@ -217,7 +218,6 @@ mod connection_tests {
 pub mod test_helpers {
     use std::time::Duration;
 
-    use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 

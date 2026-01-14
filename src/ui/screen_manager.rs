@@ -16,6 +16,7 @@ impl ScreenManager {
     }
 }
 
+#[allow(dead_code)]
 impl ScreenManager {
     pub fn render(&mut self, frame: &mut Frame, app_state: &mut AppState) {
         for v in self.stack.iter_mut() {
@@ -33,12 +34,12 @@ impl ScreenManager {
         self.stack.push(screen);
     }
     pub fn pop(&mut self, app_state: &mut AppState) -> bool {
-        if let (Some(mut screen)) = self.stack.pop() {
+        if let Some(mut screen) = self.stack.pop() {
             screen.on_unmount(app_state);
             true
         } else {
             false
         }
     }
-    pub fn replace(&mut self, screen_type: ScreenType, app_state: &mut AppState) {}
+    pub fn replace(&mut self, _screen_type: ScreenType, _app_state: &mut AppState) {}
 }

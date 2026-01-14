@@ -54,24 +54,28 @@ impl MetadataRequest {
     }
 }
 
+#[allow(dead_code)]
 pub struct MetadataResponse {
     pub correlation_id: i32,
     pub brokers: Vec<Broker>,
     pub topics: Vec<TopicMetadata>,
 }
 
+#[allow(dead_code)]
 pub struct Broker {
     pub node_id: i32,
     pub host: String,
     pub port: i32,
 }
 
+#[allow(dead_code)]
 pub struct TopicMetadata {
     pub error_code: i16,
     pub topic_name: String,
     pub partitions: Vec<PartitionMetadata>,
 }
 
+#[allow(dead_code)]
 pub struct PartitionMetadata {
     pub error_code: i16,
     pub partition_id: i32,

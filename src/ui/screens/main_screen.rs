@@ -1,4 +1,5 @@
 use crate::models::broker_stats::ConnectionStatus;
+use crate::models::topic::Topic;
 use crate::state::app_state::{AppMessage, AppState, TopicListState};
 use crate::ui::screen::{AppAction, EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
@@ -7,13 +8,11 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
 use ratatui::text::Text;
 use ratatui::widgets::{
-    Block, Borders, HighlightSpacing, List, ListItem, Padding, Paragraph, Row, Scrollbar,
+    Block, Borders, HighlightSpacing, List, ListItem, Paragraph, Row, Scrollbar,
     ScrollbarOrientation, Table, TableState,
 };
 use ratatui::Frame;
 use std::time::Duration;
-use ratatui::style::Stylize;
-use crate::models::topic::Topic;
 
 pub enum InputMode {
     SelectTopic,
@@ -151,8 +150,7 @@ impl MainScreen {
             .topics
             .items
             .iter()
-            .enumerate()
-            .map(|(_, topic)| {
+            .map(|topic| {
                 let line = Line::from(vec![
                     Span::raw(&topic.name),
                     Span::styled(
@@ -198,17 +196,17 @@ impl MainScreen {
     }
 
     fn next_record_row(&mut self) {
-        let i = self.records_table_state.selected().unwrap_or_else(|| 0);
+        let i = self.records_table_state.selected().unwrap_or(0);
         self.records_table_state.select(Some(i.saturating_add(1)));
     }
 
     fn previous_record_row(&mut self) {
-        let i = self.records_table_state.selected().unwrap_or_else(|| 0);
+        let i = self.records_table_state.selected().unwrap_or(0);
         self.records_table_state.select(Some(i.saturating_sub(1)));
     }
 
     fn render_messages_panel(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
-        let rows = app_state.records.items.iter().enumerate().map(|(i, data)| {
+        let rows = app_state.records.items.iter().map(|data| {
             let item = data.ref_array();
             item.into_iter()
                 .map(|content| ratatui::widgets::Cell::from(format!("\n{content}\n")))
@@ -238,9 +236,11 @@ impl MainScreen {
         let bar = " █ ";
 
         let t = Table::new::<_, [Constraint; 0]>(rows, [])
-            .block(Block::default().borders(Borders::ALL)
-                .title("Records")
-                .border_style(list_style)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Records")
+                    .border_style(list_style),
             )
             .header(header)
             .row_highlight_style(selected_row_style)
@@ -255,7 +255,7 @@ impl MainScreen {
         frame.render_stateful_widget(t, area, &mut self.records_table_state);
     }
 
-    fn render_footer(&self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {}
+    fn render_footer(&self, _frame: &mut Frame, _area: Rect, _app_state: &mut AppState) {}
 
     pub fn load_topics(&self, app_state: &mut AppState) {
         let tx = app_state.tx.clone();
@@ -338,7 +338,7 @@ impl MainScreen {
 }
 
 impl Screen for MainScreen {
-    fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+    fn render(&mut self, frame: &mut Frame, _area: Rect, app_state: &mut AppState) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([

@@ -40,7 +40,7 @@ impl ConfirmDialogModal {
 }
 
 impl Screen for ConfirmDialogModal {
-    fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+    fn render(&mut self, frame: &mut Frame, _area: Rect, _app_state: &mut AppState) {
         let popup_block = Block::default()
             .title(self.title.clone())
             .borders(Borders::ALL)
@@ -57,7 +57,7 @@ impl Screen for ConfirmDialogModal {
         frame.render_widget(content, area);
     }
 
-    fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
+    fn handle_key(&mut self, key: KeyCode, _app_state: &mut AppState) -> EventResult {
         match key {
             KeyCode::Char('y') | KeyCode::Char('Y') => EventResult::Quit(ConfirmAction::Accept),
             KeyCode::Char('n') | KeyCode::Char('N') => EventResult::Quit(ConfirmAction::Decline),

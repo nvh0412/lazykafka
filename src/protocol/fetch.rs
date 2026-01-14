@@ -100,17 +100,20 @@ impl FetchRequest {
     }
 }
 
+#[allow(dead_code)]
 pub struct FetchResponse {
     pub correlation_id: i32,
     pub throttle_time_ms: i32,
     pub responses: Vec<FetchTopicResponse>,
 }
 
+#[allow(dead_code)]
 pub struct FetchTopicResponse {
     pub topic: String,
     pub paritions: Vec<FetchPartitionResponse>,
 }
 
+#[allow(dead_code)]
 pub struct FetchPartitionResponse {
     pub partition_index: i32,
     pub error_code: i16,
@@ -120,6 +123,7 @@ pub struct FetchPartitionResponse {
     pub records: Vec<RecordBatch>,
 }
 
+#[allow(dead_code)]
 pub struct AbortedTransaction {
     pub producer_id: i64,
     pub first_offset: i64,
@@ -219,14 +223,14 @@ impl FetchResponse {
 
             responses.push(FetchTopicResponse {
                 topic: topic_name,
-                paritions: paritions,
+                paritions,
             });
         }
 
         Ok(Self {
             correlation_id,
             throttle_time_ms,
-            responses: responses,
+            responses,
         })
     }
 }

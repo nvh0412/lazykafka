@@ -8,7 +8,6 @@ pub mod list_offset;
 pub mod message_buffer;
 pub mod message_decoder;
 pub mod metadata;
-pub mod offset_fetch;
 pub mod record;
 pub mod record_batch;
 pub mod request_header;

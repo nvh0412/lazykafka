@@ -64,7 +64,7 @@ impl ConfirmDeleteTopicDialogModal {
 }
 
 impl Screen for ConfirmDeleteTopicDialogModal {
-    fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+    fn render(&mut self, frame: &mut Frame, _area: Rect, _app_state: &mut AppState) {
         let popup_block = Block::default()
             .title("Delete topic?".to_string())
             .title_style(ratatui::style::Style::default().fg(ratatui::style::Color::Red))

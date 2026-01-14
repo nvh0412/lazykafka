@@ -54,6 +54,7 @@ pub struct DeleteTopicsResponse {
     pub topic_error_codes: Vec<TopicErrorCode>,
 }
 
+#[allow(dead_code)]
 pub struct TopicErrorCode {
     pub topic: String,
     pub error_code: i16,

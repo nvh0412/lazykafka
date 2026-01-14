@@ -154,7 +154,7 @@ impl Screen for TopicDetailModal {
         }
     }
 
-    fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
+    fn handle_key(&mut self, key: KeyCode, _app_state: &mut AppState) -> EventResult {
         match key {
             KeyCode::Esc => EventResult::Action(ClosePopup),
             _ => EventResult::Handled

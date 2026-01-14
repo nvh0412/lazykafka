@@ -7,6 +7,7 @@ use crate::ui::screens::record_detail_modal::RecordDetailModal;
 use crate::ui::screens::topic_detail_modal::TopicDetailModal;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum ScreenType {
     Main,
     MessageDetail(Record),

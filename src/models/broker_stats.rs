@@ -6,16 +6,12 @@ pub struct BrokerStats {
     pub bytes_received: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub enum ConnectionStatus {
     Connected,
     Connecting,
+    #[default]
     Disconnected,
     Failed(String),
-}
-
-impl Default for ConnectionStatus {
-    fn default() -> Self {
-        ConnectionStatus::Disconnected
-    }
 }

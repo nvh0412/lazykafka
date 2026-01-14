@@ -3,6 +3,7 @@ use crate::{
     protocol::{ProtocolResponse, message_decoder::MessageDecoder},
 };
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Record {
     pub length: i64, // varint
@@ -17,6 +18,7 @@ pub struct Record {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Header {
     pub key: String,
     pub value: Option<Vec<u8>>,

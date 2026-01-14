@@ -3,6 +3,7 @@ use crate::{
     protocol::{message_decoder::MessageDecoder, record::Record},
 };
 
+#[allow(dead_code)]
 pub struct RecordBatch {
     pub attributes: i16,
     pub base_offset: i64,
