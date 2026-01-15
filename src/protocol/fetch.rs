@@ -16,6 +16,7 @@ pub struct FetchRequest {
     pub topics: Vec<FetchTopic>,
 }
 
+#[derive(Clone)]
 pub struct FetchTopic {
     pub topic: String,
     pub partitions: Vec<FetchPartition>,
@@ -34,6 +35,7 @@ impl FetchTopic {
     }
 }
 
+#[derive(Clone)]
 pub struct FetchPartition {
     pub partition: i32,
     pub fetch_offset: i64,

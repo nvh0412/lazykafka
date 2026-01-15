@@ -60,6 +60,53 @@ impl KafkaClient {
         }
     }
 
+    /// Attempt to reconnect to the broker
+    pub async fn reconnect(&mut self) -> Result<()> {
+        println!("[INFO] Attempting to reconnect to broker...");
+
+        // Close existing connection if any
+        if self.connection.is_connected() {
+            let _ = self.connection.disconnect().await;
+        }
+
+        // Try to connect with retries
+        for attempt in 1..=self.config.retry_count {
+            match self.connection.connect().await {
+                Ok(_) => {
+                    println!("[INFO] Successfully reconnected to broker");
+                    return Ok(());
+                }
+                Err(e) => {
+                    if attempt < self.config.retry_count {
+                        println!(
+                            "[WARN] Reconnection attempt {}/{} failed: {}. Retrying in {:?}...",
+                            attempt, self.config.retry_count, e, self.config.retry_backoff
+                        );
+                        tokio::time::sleep(self.config.retry_backoff).await;
+                    } else {
+                        println!(
+                            "[ERROR] Failed to reconnect after {} attempts",
+                            self.config.retry_count
+                        );
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        Err(KafkaError::ConnectionFailed(
+            "Max reconnection attempts exceeded".to_string(),
+        ))
+    }
+
+    /// Check if an error is a connection error that warrants reconnection
+    fn is_connection_error(error: &KafkaError) -> bool {
+        matches!(
+            error,
+            KafkaError::ConnectionFailed(_) | KafkaError::Io(_)
+        )
+    }
+
     /// Get API versions supported by broker
     #[allow(dead_code)]
     pub async fn get_api_versions(&mut self) -> Result<ApiVersionsResponse> {
@@ -88,8 +135,21 @@ impl KafkaClient {
 
     /// Get cluster metadata
     pub async fn get_metadata(&mut self, topics: Option<Vec<String>>) -> Result<MetadataResponse> {
+        // Try the request, and retry once if connection fails
+        match self.get_metadata_internal(topics.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                println!("[WARN] Connection error in get_metadata, attempting reconnection...");
+                self.reconnect().await?;
+                self.get_metadata_internal(topics).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn get_metadata_internal(&mut self, topics: Option<Vec<String>>) -> Result<MetadataResponse> {
         let correlation_id = self.connection.next_correlation_id();
-        let request = MetadataRequest::new(correlation_id, topics.clone());
+        let request = MetadataRequest::new(correlation_id, topics);
 
         self.connection.send_request(&request.encode()).await?;
 
@@ -111,6 +171,19 @@ impl KafkaClient {
 
     /// Fetch messages
     pub async fn fetch_messages(&mut self, topics: Vec<FetchTopic>) -> Result<FetchResponse> {
+        // Try the request, and retry once if connection fails
+        match self.fetch_messages_internal(topics.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                println!("[WARN] Connection error in fetch_messages, attempting reconnection...");
+                self.reconnect().await?;
+                self.fetch_messages_internal(topics).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn fetch_messages_internal(&mut self, topics: Vec<FetchTopic>) -> Result<FetchResponse> {
         let correlation_id = self.connection.next_correlation_id();
         let request = FetchRequest::new(correlation_id, -1, 500, 0, 1_048_576, 0, topics);
 
@@ -135,6 +208,22 @@ impl KafkaClient {
 
     /// List Offsets
     pub async fn list_offsets(
+        &mut self,
+        topics: Vec<ListOffsetTopic>,
+    ) -> Result<ListOffsetResponse> {
+        // Try the request, and retry once if connection fails
+        match self.list_offsets_internal(topics.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                println!("[WARN] Connection error in list_offsets, attempting reconnection...");
+                self.reconnect().await?;
+                self.list_offsets_internal(topics).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn list_offsets_internal(
         &mut self,
         topics: Vec<ListOffsetTopic>,
     ) -> Result<ListOffsetResponse> {

@@ -12,11 +12,13 @@ pub struct ListOffsetRequest {
     pub topics: Vec<ListOffsetTopic>,
 }
 
+#[derive(Clone)]
 pub struct ListOffsetTopic {
     pub name: String,
     pub partitions: Vec<ListOffsetPartition>,
 }
 
+#[derive(Clone)]
 pub struct ListOffsetPartition {
     pub partition_index: i32,
     pub timestamp: i64,

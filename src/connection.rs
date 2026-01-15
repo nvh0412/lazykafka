@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use socket2::{Socket, TcpKeepalive};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -52,6 +53,12 @@ impl KafkaConnection {
     pub async fn connect(&mut self) -> Result<()> {
         match TcpStream::connect(&self.broker_address).await {
             Ok(stream) => {
+                // Configure TCP keep-alive to prevent idle connection timeouts
+                if let Err(e) = Self::configure_keepalive(&stream) {
+                    println!("[WARN] Failed to configure TCP keep-alive: {}", e);
+                    // Continue anyway - keep-alive is a nice-to-have, not required
+                }
+
                 println!("[INFO] Successfully connected to {}", self.broker_address);
                 self.stream = Some(stream);
                 self.state = ConnectionState::Connected;
@@ -69,6 +76,50 @@ impl KafkaConnection {
         }
     }
 
+    /// Configure TCP keep-alive to prevent idle connection drops
+    #[cfg(unix)]
+    fn configure_keepalive(stream: &TcpStream) -> std::io::Result<()> {
+        use std::os::unix::io::{AsRawFd, FromRawFd};
+
+        // Get the raw file descriptor from the tokio TcpStream
+        let raw_fd = stream.as_raw_fd();
+
+        // Create a socket2::Socket from the raw fd (without taking ownership)
+        let socket = unsafe { Socket::from_raw_fd(raw_fd) };
+
+        // Configure keep-alive parameters:
+        // - Start probing after 60 seconds of idle time
+        // - Send probes every 30 seconds
+        // - Close connection after 3 failed probes (90 seconds total)
+        let keepalive = TcpKeepalive::new()
+            .with_time(Duration::from_secs(60))
+            .with_interval(Duration::from_secs(30));
+
+        socket.set_tcp_keepalive(&keepalive)?;
+
+        // Prevent Socket from closing the fd when dropped (we don't own it)
+        std::mem::forget(socket);
+
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn configure_keepalive(stream: &TcpStream) -> std::io::Result<()> {
+        use std::os::windows::io::{AsRawSocket, FromRawSocket};
+
+        let raw_socket = stream.as_raw_socket();
+        let socket = unsafe { Socket::from_raw_socket(raw_socket) };
+
+        let keepalive = TcpKeepalive::new()
+            .with_time(Duration::from_secs(60))
+            .with_interval(Duration::from_secs(30));
+
+        socket.set_tcp_keepalive(&keepalive)?;
+        std::mem::forget(socket);
+
+        Ok(())
+    }
+
     pub fn next_correlation_id(&mut self) -> i32 {
         self.correlation_id += 1;
         self.correlation_id
@@ -78,9 +129,51 @@ impl KafkaConnection {
         self.state == ConnectionState::Connected && self.stream.is_some()
     }
 
-    pub async fn send_request(&mut self, request: &[u8]) -> Result<()> {
+    /// Validate that the connection is actually alive by checking socket health
+    pub async fn validate_connection(&mut self) -> bool {
         if !self.is_connected() {
-            return Err(KafkaError::ConnectionFailed("Not connected".to_string()));
+            return false;
+        }
+
+        // Try to peek at the socket to see if it's still alive
+        // If the connection was closed by the broker, peek will detect it
+        if let Some(stream) = &self.stream {
+            let mut buf = [0u8; 1];
+            match stream.try_read(&mut buf) {
+                Ok(0) => {
+                    // Connection closed by peer (read returned 0 bytes)
+                    println!("[WARN] Connection to {} was closed by peer", self.broker_address);
+                    self.state = ConnectionState::Failed;
+                    false
+                }
+                Ok(_) => {
+                    // This shouldn't happen in normal operation (we read actual data)
+                    // This means there's buffered data we didn't expect
+                    println!("[WARN] Unexpected data on connection to {}", self.broker_address);
+                    true
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // No data available to read - connection is healthy
+                    true
+                }
+                Err(_) => {
+                    // Some other error - treat as connection failure
+                    println!("[WARN] Connection validation failed for {}", self.broker_address);
+                    self.state = ConnectionState::Failed;
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
+
+    pub async fn send_request(&mut self, request: &[u8]) -> Result<()> {
+        // Validate connection health before sending
+        if !self.validate_connection().await {
+            return Err(KafkaError::ConnectionFailed(
+                "Connection validation failed".to_string(),
+            ));
         }
 
         let stream = self
@@ -95,7 +188,20 @@ impl KafkaConnection {
                 Ok(())
             }
             Err(e) => {
-                self.state = ConnectionState::Failed;
+                // Classify the error - is it a connection issue or something else?
+                let is_connection_error = matches!(
+                    e.kind(),
+                    std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::NotConnected
+                );
+
+                if is_connection_error {
+                    println!("[ERROR] Connection lost while sending to {}: {}", self.broker_address, e);
+                    self.state = ConnectionState::Failed;
+                }
+
                 Err(KafkaError::Io(e))
             }
         }
@@ -128,7 +234,21 @@ impl KafkaConnection {
         match timeout(timeout_duration, stream.read_exact(&mut size_buf)).await {
             Ok(Ok(_)) => {}
             Ok(Err(e)) => {
-                self.state = ConnectionState::Failed;
+                // Classify the error
+                let is_connection_error = matches!(
+                    e.kind(),
+                    std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::NotConnected
+                        | std::io::ErrorKind::UnexpectedEof
+                );
+
+                if is_connection_error {
+                    println!("[ERROR] Connection lost while reading from {}: {}", self.broker_address, e);
+                    self.state = ConnectionState::Failed;
+                }
+
                 return Err(KafkaError::Io(e));
             }
             Err(_) => {
@@ -160,7 +280,21 @@ impl KafkaConnection {
                 Ok(response)
             }
             Ok(Err(e)) => {
-                self.state = ConnectionState::Failed;
+                // Classify the error
+                let is_connection_error = matches!(
+                    e.kind(),
+                    std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::NotConnected
+                        | std::io::ErrorKind::UnexpectedEof
+                );
+
+                if is_connection_error {
+                    println!("[ERROR] Connection lost while reading body from {}: {}", self.broker_address, e);
+                    self.state = ConnectionState::Failed;
+                }
+
                 Err(KafkaError::Io(e))
             }
             Err(_) => Err(KafkaError::ProtocolError(
