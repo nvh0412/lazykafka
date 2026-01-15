@@ -142,14 +142,20 @@ impl KafkaConnection {
             match stream.try_read(&mut buf) {
                 Ok(0) => {
                     // Connection closed by peer (read returned 0 bytes)
-                    println!("[WARN] Connection to {} was closed by peer", self.broker_address);
+                    println!(
+                        "[WARN] Connection to {} was closed by peer",
+                        self.broker_address
+                    );
                     self.state = ConnectionState::Failed;
                     false
                 }
                 Ok(_) => {
                     // This shouldn't happen in normal operation (we read actual data)
                     // This means there's buffered data we didn't expect
-                    println!("[WARN] Unexpected data on connection to {}", self.broker_address);
+                    println!(
+                        "[WARN] Unexpected data on connection to {}",
+                        self.broker_address
+                    );
                     true
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -158,7 +164,10 @@ impl KafkaConnection {
                 }
                 Err(_) => {
                     // Some other error - treat as connection failure
-                    println!("[WARN] Connection validation failed for {}", self.broker_address);
+                    println!(
+                        "[WARN] Connection validation failed for {}",
+                        self.broker_address
+                    );
                     self.state = ConnectionState::Failed;
                     false
                 }
@@ -198,7 +207,10 @@ impl KafkaConnection {
                 );
 
                 if is_connection_error {
-                    println!("[ERROR] Connection lost while sending to {}: {}", self.broker_address, e);
+                    println!(
+                        "[ERROR] Connection lost while sending to {}: {}",
+                        self.broker_address, e
+                    );
                     self.state = ConnectionState::Failed;
                 }
 
@@ -245,7 +257,10 @@ impl KafkaConnection {
                 );
 
                 if is_connection_error {
-                    println!("[ERROR] Connection lost while reading from {}: {}", self.broker_address, e);
+                    println!(
+                        "[ERROR] Connection lost while reading from {}: {}",
+                        self.broker_address, e
+                    );
                     self.state = ConnectionState::Failed;
                 }
 
@@ -291,7 +306,10 @@ impl KafkaConnection {
                 );
 
                 if is_connection_error {
-                    println!("[ERROR] Connection lost while reading body from {}: {}", self.broker_address, e);
+                    println!(
+                        "[ERROR] Connection lost while reading body from {}: {}",
+                        self.broker_address, e
+                    );
                     self.state = ConnectionState::Failed;
                 }
 

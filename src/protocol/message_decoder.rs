@@ -266,8 +266,8 @@ mod decoder_tests {
         let data = vec![0x01, 0x00];
         let mut dec = MessageDecoder::new(&data);
 
-        assert!(dec.read_bool().unwrap());
-        assert!(dec.read_bool().unwrap());
+        assert!(dec.read_bool().unwrap()); // 0x01 -> true
+        assert!(!dec.read_bool().unwrap()); // 0x00 -> false
     }
 
     #[test]

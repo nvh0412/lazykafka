@@ -62,8 +62,6 @@ impl KafkaClient {
 
     /// Attempt to reconnect to the broker
     pub async fn reconnect(&mut self) -> Result<()> {
-        println!("[INFO] Attempting to reconnect to broker...");
-
         // Close existing connection if any
         if self.connection.is_connected() {
             let _ = self.connection.disconnect().await;
@@ -73,21 +71,12 @@ impl KafkaClient {
         for attempt in 1..=self.config.retry_count {
             match self.connection.connect().await {
                 Ok(_) => {
-                    println!("[INFO] Successfully reconnected to broker");
                     return Ok(());
                 }
                 Err(e) => {
                     if attempt < self.config.retry_count {
-                        println!(
-                            "[WARN] Reconnection attempt {}/{} failed: {}. Retrying in {:?}...",
-                            attempt, self.config.retry_count, e, self.config.retry_backoff
-                        );
                         tokio::time::sleep(self.config.retry_backoff).await;
                     } else {
-                        println!(
-                            "[ERROR] Failed to reconnect after {} attempts",
-                            self.config.retry_count
-                        );
                         return Err(e);
                     }
                 }
@@ -101,10 +90,7 @@ impl KafkaClient {
 
     /// Check if an error is a connection error that warrants reconnection
     fn is_connection_error(error: &KafkaError) -> bool {
-        matches!(
-            error,
-            KafkaError::ConnectionFailed(_) | KafkaError::Io(_)
-        )
+        matches!(error, KafkaError::ConnectionFailed(_) | KafkaError::Io(_))
     }
 
     /// Get API versions supported by broker
@@ -139,7 +125,6 @@ impl KafkaClient {
         match self.get_metadata_internal(topics.clone()).await {
             Ok(response) => Ok(response),
             Err(e) if Self::is_connection_error(&e) => {
-                println!("[WARN] Connection error in get_metadata, attempting reconnection...");
                 self.reconnect().await?;
                 self.get_metadata_internal(topics).await
             }
@@ -147,7 +132,10 @@ impl KafkaClient {
         }
     }
 
-    async fn get_metadata_internal(&mut self, topics: Option<Vec<String>>) -> Result<MetadataResponse> {
+    async fn get_metadata_internal(
+        &mut self,
+        topics: Option<Vec<String>>,
+    ) -> Result<MetadataResponse> {
         let correlation_id = self.connection.next_correlation_id();
         let request = MetadataRequest::new(correlation_id, topics);
 
@@ -175,7 +163,6 @@ impl KafkaClient {
         match self.fetch_messages_internal(topics.clone()).await {
             Ok(response) => Ok(response),
             Err(e) if Self::is_connection_error(&e) => {
-                println!("[WARN] Connection error in fetch_messages, attempting reconnection...");
                 self.reconnect().await?;
                 self.fetch_messages_internal(topics).await
             }
@@ -215,7 +202,6 @@ impl KafkaClient {
         match self.list_offsets_internal(topics.clone()).await {
             Ok(response) => Ok(response),
             Err(e) if Self::is_connection_error(&e) => {
-                println!("[WARN] Connection error in list_offsets, attempting reconnection...");
                 self.reconnect().await?;
                 self.list_offsets_internal(topics).await
             }
