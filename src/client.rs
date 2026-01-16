@@ -6,8 +6,12 @@ use crate::protocol::delete_topics::{DeleteTopicsRequest, DeleteTopicsResponse};
 use crate::protocol::describe_configs::{
     DescribeConfigsRequest, DescribeConfigsResource, DescribeConfigsResponse, ResourceType,
 };
+use crate::protocol::describe_groups::{DescribeGroupsRequest, DescribeGroupsResponse};
 use crate::protocol::fetch::{FetchRequest, FetchResponse, FetchTopic};
+use crate::protocol::find_coordinator::{FindCoordinatorRequest, FindCoordinatorResponse};
+use crate::protocol::list_groups::{ListGroupsRequest, ListGroupsResponse};
 use crate::protocol::list_offset::{ListOffsetRequest, ListOffsetResponse, ListOffsetTopic};
+use crate::protocol::offset_fetch::{OffsetFetchRequest, OffsetFetchResponse, OffsetFetchTopic};
 use crate::protocol::{ProtocolRequest, ProtocolResponse};
 use crate::{
     connection::KafkaConnection,
@@ -280,6 +284,167 @@ impl KafkaClient {
                 .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
 
         let response = DeleteTopicsResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    // =====================
+    // Consumer Group APIs
+    // =====================
+
+    /// Find the coordinator broker for a consumer group
+    pub async fn find_coordinator(&mut self, group_id: String) -> Result<FindCoordinatorResponse> {
+        match self.find_coordinator_internal(group_id.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                self.reconnect().await?;
+                self.find_coordinator_internal(group_id).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn find_coordinator_internal(
+        &mut self,
+        group_id: String,
+    ) -> Result<FindCoordinatorResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request = FindCoordinatorRequest::for_group(correlation_id, group_id);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = FindCoordinatorResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// List all consumer groups on the cluster
+    pub async fn list_groups(&mut self) -> Result<ListGroupsResponse> {
+        match self.list_groups_internal().await {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                self.reconnect().await?;
+                self.list_groups_internal().await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn list_groups_internal(&mut self) -> Result<ListGroupsResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request = ListGroupsRequest::new(correlation_id);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = ListGroupsResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// Describe consumer groups (get detailed info including members)
+    pub async fn describe_groups(
+        &mut self,
+        group_ids: Vec<String>,
+    ) -> Result<DescribeGroupsResponse> {
+        match self.describe_groups_internal(group_ids.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                self.reconnect().await?;
+                self.describe_groups_internal(group_ids).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn describe_groups_internal(
+        &mut self,
+        group_ids: Vec<String>,
+    ) -> Result<DescribeGroupsResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request = DescribeGroupsRequest::new(correlation_id, group_ids);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = DescribeGroupsResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// Fetch committed offsets for a consumer group
+    pub async fn fetch_offsets(
+        &mut self,
+        group_id: String,
+        topics: Option<Vec<OffsetFetchTopic>>,
+    ) -> Result<OffsetFetchResponse> {
+        match self.fetch_offsets_internal(group_id.clone(), topics.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                self.reconnect().await?;
+                self.fetch_offsets_internal(group_id, topics).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn fetch_offsets_internal(
+        &mut self,
+        group_id: String,
+        topics: Option<Vec<OffsetFetchTopic>>,
+    ) -> Result<OffsetFetchResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request = OffsetFetchRequest::new(correlation_id, group_id, topics);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = OffsetFetchResponse::decode(&response_bytes)?;
 
         if response.correlation_id != correlation_id {
             return Err(KafkaError::InvalidResponse {

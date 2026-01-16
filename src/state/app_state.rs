@@ -2,6 +2,7 @@ use crate::client::KafkaClient;
 use crate::components::stateful_list::StatefulList;
 use crate::error::KafkaError;
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
+use crate::models::consumer_group::{ConsumerGroupDetail, ConsumerGroupSummary};
 use crate::models::topic::{Topic, TopicConfig};
 use crate::protocol::record::Record;
 use crate::repository::RepositoryManager;
@@ -21,6 +22,79 @@ pub struct TopicInfoState {
     pub scroll_state: ScrollbarState,
 }
 
+// Consumer Group State
+pub struct ConsumerGroupListState {
+    pub items: Vec<ConsumerGroupSummary>,
+    pub table_state: TableState,
+    pub vertical_scroll_state: ScrollbarState,
+    pub vertical_scroll: usize,
+}
+
+impl Default for ConsumerGroupListState {
+    fn default() -> Self {
+        Self {
+            items: vec![],
+            table_state: TableState::default(),
+            vertical_scroll_state: ScrollbarState::default(),
+            vertical_scroll: 0,
+        }
+    }
+}
+
+impl ConsumerGroupListState {
+    pub fn select_next(&mut self, max: usize) {
+        if max == 0 {
+            return;
+        }
+        let i = self.table_state.selected().unwrap_or(0);
+        let next = if i >= max - 1 { 0 } else { i + 1 };
+        self.table_state.select(Some(next));
+        self.vertical_scroll = next;
+        self.vertical_scroll_state = self.vertical_scroll_state.position(next);
+    }
+
+    pub fn select_previous(&mut self, max: usize) {
+        if max == 0 {
+            return;
+        }
+        let i = self.table_state.selected().unwrap_or(0);
+        let prev = if i == 0 { max - 1 } else { i - 1 };
+        self.table_state.select(Some(prev));
+        self.vertical_scroll = prev;
+        self.vertical_scroll_state = self.vertical_scroll_state.position(prev);
+    }
+
+    pub fn selected_index(&self) -> Option<usize> {
+        self.table_state.selected()
+    }
+}
+
+pub struct ConsumerGroupDetailState {
+    pub detail: Option<ConsumerGroupDetail>,
+    pub members_table_state: TableState,
+    pub offsets_table_state: TableState,
+    pub active_tab: ConsumerGroupTab,
+}
+
+impl Default for ConsumerGroupDetailState {
+    fn default() -> Self {
+        Self {
+            detail: None,
+            members_table_state: TableState::default(),
+            offsets_table_state: TableState::default(),
+            active_tab: ConsumerGroupTab::Overview,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConsumerGroupTab {
+    #[default]
+    Overview,
+    Members,
+    Offsets,
+}
+
 pub enum AppMessage {
     TopicsLoaded(Vec<Topic>),
     StatsUpdated(BrokerStats),
@@ -28,6 +102,10 @@ pub enum AppMessage {
     TopicConfigLoaded(String, TopicConfig),
     TopicDeleted(String),
     Error(String),
+    // Consumer group messages
+    ConsumerGroupsLoaded(Vec<ConsumerGroupSummary>),
+    ConsumerGroupDetailLoaded(ConsumerGroupDetail),
+    ConsumerGroupError(String),
 }
 
 #[allow(dead_code)]
@@ -45,6 +123,11 @@ pub struct AppState {
     pub rx: mpsc::UnboundedReceiver<AppMessage>,
     pub tx: mpsc::UnboundedSender<AppMessage>,
     pub repository_manager: RepositoryManager,
+    // Consumer group state
+    pub consumer_groups: StatefulList<ConsumerGroupSummary>,
+    pub filtered_consumer_groups_state: ConsumerGroupListState,
+    pub consumer_group_detail_state: ConsumerGroupDetailState,
+    pub consumer_group_search_query: String,
 }
 
 impl AppState {
@@ -77,6 +160,11 @@ impl AppState {
             tx,
             rx,
             repository_manager,
+            // Consumer group state
+            consumer_groups: StatefulList::with_items(vec![]),
+            filtered_consumer_groups_state: ConsumerGroupListState::default(),
+            consumer_group_detail_state: ConsumerGroupDetailState::default(),
+            consumer_group_search_query: String::new(),
         }
     }
 }

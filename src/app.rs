@@ -49,6 +49,14 @@ impl App {
                     .push(screen_type.clone(), &mut self.state);
                 true
             }
+            EventResult::Replace(screen_type) => {
+                self.screen_manager.replace(screen_type.clone(), &mut self.state);
+                true
+            }
+            EventResult::Pop => {
+                self.screen_manager.pop(&mut self.state);
+                true
+            }
             EventResult::Quit(confirm_action) => match confirm_action {
                 ConfirmAction::Accept => false,
                 ConfirmAction::Decline => {
@@ -103,6 +111,14 @@ impl App {
                         .topics
                         .update_items(self.state.topics.items.clone());
                 }
+                AppMessage::ConsumerGroupsLoaded(groups) => {
+                    self.state.consumer_groups = StatefulList::with_items(groups.clone());
+                    self.state.filtered_consumer_groups_state.items = groups;
+                }
+                AppMessage::ConsumerGroupDetailLoaded(detail) => {
+                    self.state.consumer_group_detail_state.detail = Some(detail);
+                }
+                _ => {}
             }
         }
     }

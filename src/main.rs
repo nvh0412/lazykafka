@@ -11,6 +11,8 @@ use std::{
     io::{self, Result},
     sync::Arc,
 };
+use std::time::Duration;
+use ratatui::crossterm::event::poll;
 use tokio::sync::RwLock;
 
 use crate::{app::App, client_builder::ClientBuilder};
@@ -64,10 +66,12 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
     loop {
         terminal.draw(|f| app.screen_manager.render(f, &mut app.state))?;
         app.handle_messages();
-        if let Event::Key(key) = event::read()? {
-            let mut result = app.screen_manager.handle_key(key.code, &mut app.state);
-            if !app.handle_event_result(&mut result) {
-                return Ok(false);
+        if poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                let mut result = app.screen_manager.handle_key(key.code, &mut app.state);
+                if !app.handle_event_result(&mut result) {
+                    return Ok(false);
+                }
             }
         }
     }

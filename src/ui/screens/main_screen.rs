@@ -382,6 +382,9 @@ impl Screen for MainScreen {
                         EventResult::Handled
                     }
                 }
+                KeyCode::Char('g') => {
+                    EventResult::Replace(ScreenType::ConsumerGroups)
+                }
                 KeyCode::Up => {
                     app_state.filtered_topic_state.vertical_scroll = app_state
                         .filtered_topic_state

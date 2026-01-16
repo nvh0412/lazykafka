@@ -2,6 +2,8 @@ use crate::protocol::record::Record;
 use crate::ui::screen::Screen;
 use crate::ui::screens::confirm_delete_topic_dialog::ConfirmDeleteTopicDialogModal;
 use crate::ui::screens::confirm_dialog_modal::ConfirmDialogModal;
+use crate::ui::screens::consumer_group_detail_modal::ConsumerGroupDetailModal;
+use crate::ui::screens::consumer_groups_screen::ConsumerGroupsScreen;
 use crate::ui::screens::main_screen::MainScreen;
 use crate::ui::screens::record_detail_modal::RecordDetailModal;
 use crate::ui::screens::topic_detail_modal::TopicDetailModal;
@@ -15,6 +17,9 @@ pub enum ScreenType {
     ConfirmDialog { title: String, message: String },
     ConfirmDeleteTopicDialog { topic_name: String },
     ScreenInput { placeholder: String },
+    // Consumer group screens
+    ConsumerGroups,
+    ConsumerGroupDetail(String),
 }
 
 pub fn create_screen(screen_type: ScreenType) -> Box<dyn Screen> {
@@ -28,6 +33,10 @@ pub fn create_screen(screen_type: ScreenType) -> Box<dyn Screen> {
             Box::new(ConfirmDeleteTopicDialogModal::new(topic_name))
         }
         ScreenType::MessageDetail(t) => Box::new(RecordDetailModal::new(t)),
+        ScreenType::ConsumerGroups => Box::new(ConsumerGroupsScreen::new()),
+        ScreenType::ConsumerGroupDetail(group_id) => {
+            Box::new(ConsumerGroupDetailModal::new(group_id))
+        }
         _ => unimplemented!(),
     }
 }

@@ -41,5 +41,12 @@ impl ScreenManager {
             false
         }
     }
-    pub fn replace(&mut self, _screen_type: ScreenType, _app_state: &mut AppState) {}
+    pub fn replace(&mut self, _screen_type: ScreenType, _app_state: &mut AppState) {
+        if let Some(mut screen) = self.stack.pop() {
+            screen.on_unmount(_app_state);
+        }
+        let mut screen = create_screen(_screen_type);
+        screen.on_mount(_app_state);
+        self.stack.push(screen);
+    }
 }
