@@ -1,21 +1,21 @@
 use crate::models::broker_stats::ConnectionStatus;
 use crate::models::topic::Topic;
-use crate::state::app_state::{AppMessage, AppState, TopicListState};
+use crate::state::app_state::{AppMessage, AppState, ConsumerGroupListState, TopicListState};
 use crate::ui::screen::{AppAction, EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
-use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
-use ratatui::text::Text;
 use ratatui::widgets::{
-    Block, Borders, HighlightSpacing, List, ListItem, Paragraph, Row, Scrollbar,
+    Block, BorderType, Borders, Cell, List, ListItem, Paragraph, Row, Scrollbar,
     ScrollbarOrientation, Table, TableState,
 };
+use ratatui::Frame;
 use std::time::Duration;
 
 pub enum InputMode {
     SelectTopic,
+    SelectGroup,
     SearchTopic,
     ViewRecords,
 }
@@ -31,45 +31,6 @@ impl MainScreen {
             input_mode: InputMode::SelectTopic,
             records_table_state: TableState::default().with_selected(0),
         }
-    }
-
-    fn render_header(&self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
-        let stats = &app_state.broker_stats;
-        let breadcrumb = &app_state.breadcrumb;
-        let header = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Length(25),
-                Constraint::Min(20),
-                Constraint::Length(40),
-            ])
-            .split(area);
-
-        // Broker
-        let broker = Paragraph::new(format!("Broker: {}", stats.broker));
-        frame.render_widget(broker, header[0]);
-
-        // Breadcrumb
-        let breadcrumb_text = breadcrumb.join(" > ");
-        let breadcrumb_widget = Paragraph::new(breadcrumb_text);
-        frame.render_widget(breadcrumb_widget, header[1]);
-
-        // Stats
-        let status_icon = match stats.status {
-            ConnectionStatus::Connected => "✓",
-            ConnectionStatus::Connecting => "⋯",
-            ConnectionStatus::Disconnected => "✗",
-            ConnectionStatus::Failed(_) => "⚠",
-        };
-
-        let stats_text = format!(
-            "{} Connected | ↓ {} | ↑ {}",
-            status_icon,
-            self.format_bytes(stats.bytes_received as u64),
-            self.format_bytes(stats.bytes_sent as u64)
-        );
-        let stats_widget = Paragraph::new(stats_text);
-        frame.render_widget(stats_widget, header[2]);
     }
 
     fn format_bytes(&self, bytes: u64) -> String {
@@ -97,13 +58,65 @@ impl MainScreen {
             ])
             .split(area);
 
+        let left_pillars = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+                Constraint::Length(3),
+            ])
+            .split(body[0]);
+
+        let broker_box = Paragraph::new(format!("{}", app_state.broker_stats.broker))
+            .block(
+                Block::default()
+                    .title("Broker")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Plain),
+            )
+            .style(Style::default().fg(Color::White));
+
+        frame.render_widget(broker_box, left_pillars[0]);
+
         self.render_topics_list(
             frame,
-            body[0],
+            left_pillars[1],
             &mut app_state.filtered_topic_state,
             &app_state.topic_search_query,
         );
+
+        self.render_groups_list(
+            frame,
+            left_pillars[2],
+            &mut app_state.filtered_consumer_groups_state,
+        );
+
+        self.render_stats(frame, left_pillars[3], app_state);
+
         self.render_messages_panel(frame, body[1], app_state);
+    }
+
+    fn render_stats(&self, frame: &mut Frame, area: Rect, app_state: &AppState) {
+        let stats = &app_state.broker_stats;
+
+        // Stats
+        let status_icon = match stats.status {
+            ConnectionStatus::Connected => "✓",
+            ConnectionStatus::Connecting => "⋯",
+            ConnectionStatus::Disconnected => "✗",
+            ConnectionStatus::Failed(_) => "⚠",
+        };
+
+        let stats_text = format!(
+            "{} Connected | ↓ {} | ↑ {}",
+            status_icon,
+            self.format_bytes(stats.bytes_received as u64),
+            self.format_bytes(stats.bytes_sent as u64)
+        );
+        let stats_widget =
+            Paragraph::new(stats_text).block(Block::default().borders(Borders::ALL).title("Stats"));
+        frame.render_widget(stats_widget, area);
     }
 
     fn render_topics_list(
@@ -117,8 +130,8 @@ impl MainScreen {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3), // Search box
-                Constraint::Min(0),    // Topic list
+                Constraint::Length(3),
+                Constraint::Min(0), // Topic list
             ])
             .split(area);
 
@@ -130,14 +143,13 @@ impl MainScreen {
         };
 
         let search_style = match self.input_mode {
-            InputMode::SearchTopic => Style::default().fg(Color::White),
-            _ => Style::default().fg(Color::Gray),
+            InputMode::SearchTopic => Style::default().fg(Color::LightGreen),
+            _ => Style::default().fg(Color::White),
         };
 
         let search_box = Paragraph::new(search_text)
             .block(
                 Block::default()
-                    .title("Search")
                     .borders(Borders::ALL)
                     .border_style(search_style),
             )
@@ -163,8 +175,8 @@ impl MainScreen {
             .collect();
 
         let list_style = match self.input_mode {
-            InputMode::SelectTopic => Style::default().fg(Color::White),
-            _ => Style::default().fg(Color::Gray),
+            InputMode::SelectTopic => Style::default().fg(Color::LightGreen),
+            _ => Style::default().fg(Color::White),
         };
 
         let list = List::new(filtered_items)
@@ -180,7 +192,6 @@ impl MainScreen {
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
             )
-            .highlight_symbol("► ")
             .scroll_padding(5);
 
         topic_state.vertical_scroll_state = topic_state
@@ -192,6 +203,55 @@ impl MainScreen {
             Scrollbar::new(ScrollbarOrientation::VerticalRight),
             chunks[1],
             &mut topic_state.vertical_scroll_state,
+        );
+    }
+
+    fn render_groups_list(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        state: &mut ConsumerGroupListState,
+    ) {
+        let list_style = match self.input_mode {
+            InputMode::SelectGroup => Style::default().fg(Color::LightGreen),
+            _ => Style::default().fg(Color::White),
+        };
+
+        // Filter topics based on search query
+        let filtered_items: Vec<ListItem> = state
+            .groups
+            .items
+            .iter()
+            .map(|group| {
+                let line = Line::from(vec![Span::raw(&group.group_id)]);
+                ListItem::new(line)
+            })
+            .collect();
+
+        let list = List::new(filtered_items)
+            .block(
+                Block::default()
+                    .title("Groups")
+                    .borders(Borders::ALL)
+                    .border_style(list_style),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .scroll_padding(5);
+
+        state.vertical_scroll_state = state
+            .vertical_scroll_state
+            .content_length(state.items.len());
+
+        frame.render_stateful_widget(list, area, &mut state.groups.state);
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight),
+            area,
+            &mut state.vertical_scroll_state,
         );
     }
 
@@ -211,53 +271,56 @@ impl MainScreen {
             item.into_iter()
                 .map(|content| ratatui::widgets::Cell::from(format!("\n{content}\n")))
                 .collect::<Row>()
-                .height(4)
+                .height(3)
         });
 
         let list_style = match self.input_mode {
-            InputMode::ViewRecords => Style::default().fg(Color::White),
-            _ => Style::default().fg(Color::Gray),
+            InputMode::ViewRecords => Style::default().fg(Color::LightGreen),
+            _ => Style::default().fg(Color::White),
         };
-
-        let header_style = Style::default().bg(Color::Cyan);
 
         let header = ["Key", "Partition", "Timestamp", "Offset", "Value"]
             .into_iter()
-            .map(ratatui::widgets::Cell::from)
+            .map(|t| Cell::from(format!("{}", t)))
             .collect::<Row>()
-            .style(header_style)
             .height(1);
 
         let selected_row_style = Style::default()
-            .add_modifier(Modifier::REVERSED)
-            .fg(Color::Black)
-            .bg(Color::White);
+            .bg(Color::Blue)
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
 
-        let bar = " █ ";
-
-        let t = Table::new::<_, [Constraint; 0]>(rows, [])
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Records")
-                    .border_style(list_style),
-            )
-            .header(header)
-            .row_highlight_style(selected_row_style)
-            .highlight_symbol(Text::from(vec![
-                "".into(),
-                bar.into(),
-                bar.into(),
-                "".into(),
-            ]))
-            .highlight_spacing(HighlightSpacing::Always);
+        let t = Table::new::<_, [Constraint; 5]>(
+            rows,
+            [
+                Constraint::Length(30),
+                Constraint::Length(10),
+                Constraint::Length(10),
+                Constraint::Length(10),
+                Constraint::Min(0),
+            ],
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Records")
+                .border_style(list_style),
+        )
+        .header(header)
+        .row_highlight_style(selected_row_style);
 
         frame.render_stateful_widget(t, area, &mut self.records_table_state);
     }
 
-    fn render_footer(&self, _frame: &mut Frame, _area: Rect, _app_state: &mut AppState) {}
+    fn render_footer(&self, frame: &mut Frame, area: Rect, _app_state: &mut AppState) {
+        let p = Paragraph::new("<esc>: Cancel, q: Quit, <tab>: Switch panel")
+            .block(Block::default())
+            .style(Style::default().fg(Color::LightBlue));
 
-    pub fn load_topics(&self, app_state: &mut AppState) {
+        frame.render_widget(p, area);
+    }
+
+    fn load_topics(&self, app_state: &mut AppState) {
         let tx = app_state.tx.clone();
         let repo = app_state.repository_manager.topics().clone();
 
@@ -273,7 +336,7 @@ impl MainScreen {
         });
     }
 
-    pub fn start_stats_polling(&self, app_state: &mut AppState) {
+    fn start_stats_polling(&self, app_state: &mut AppState) {
         let tx = app_state.tx.clone();
         let client = app_state.repository_manager.kafka_client.clone();
 
@@ -289,11 +352,11 @@ impl MainScreen {
         });
     }
 
-    pub fn switch_view_mode(&mut self, input_mode: InputMode) {
+    fn switch_view_mode(&mut self, input_mode: InputMode) {
         self.input_mode = input_mode;
     }
 
-    pub fn update_filters(&mut self, app_state: &mut AppState) {
+    fn update_filters(&mut self, app_state: &mut AppState) {
         app_state.filtered_topic_state.topics.update_items(
             app_state
                 .topics
@@ -305,22 +368,22 @@ impl MainScreen {
         );
     }
 
-    pub fn on_search_char(&mut self, c: char, app_state: &mut AppState) {
+    fn on_search_char(&mut self, c: char, app_state: &mut AppState) {
         app_state.topic_search_query.push(c);
         self.update_filters(app_state);
     }
 
-    pub fn on_search_backspace(&mut self, app_state: &mut AppState) {
+    fn on_search_backspace(&mut self, app_state: &mut AppState) {
         app_state.topic_search_query.pop();
         self.update_filters(app_state);
     }
 
-    pub fn on_reset_filters(&mut self, app_state: &mut AppState) {
+    fn on_reset_filters(&mut self, app_state: &mut AppState) {
         app_state.topic_search_query.clear();
         self.update_filters(app_state);
     }
 
-    pub fn load_messages_for_topic(&self, topic: Topic, app_state: &mut AppState) {
+    fn load_messages_for_topic(&self, topic: Topic, app_state: &mut AppState) {
         let tx = app_state.tx.clone();
         let repo = app_state.repository_manager.messages().clone();
 
@@ -335,6 +398,22 @@ impl MainScreen {
             }
         });
     }
+
+    fn load_consumer_groups(&self, app_state: &mut AppState) {
+        let tx = app_state.tx.clone();
+        let repo = app_state.repository_manager.consumer_groups().clone();
+
+        tokio::spawn(async move {
+            match repo.fetch_all().await {
+                Ok(groups) => {
+                    let _ = tx.send(AppMessage::ConsumerGroupsLoaded(groups));
+                }
+                Err(e) => {
+                    let _ = tx.send(AppMessage::ConsumerGroupError(e.to_string()));
+                }
+            }
+        });
+    }
 }
 
 impl Screen for MainScreen {
@@ -342,20 +421,19 @@ impl Screen for MainScreen {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1), // Header
                 Constraint::Min(0),    // Body
                 Constraint::Length(1), // Footer
             ])
             .split(frame.area());
 
-        self.render_header(frame, chunks[0], app_state);
-        self.render_body(frame, chunks[1], app_state);
-        self.render_footer(frame, chunks[2], app_state);
+        self.render_body(frame, chunks[0], app_state);
+        self.render_footer(frame, chunks[1], app_state);
     }
 
     fn on_mount(&mut self, app_state: &mut AppState) {
         self.load_topics(app_state);
         self.start_stats_polling(app_state);
+        self.load_consumer_groups(app_state);
     }
 
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
@@ -382,9 +460,7 @@ impl Screen for MainScreen {
                         EventResult::Handled
                     }
                 }
-                KeyCode::Char('g') => {
-                    EventResult::Replace(ScreenType::ConsumerGroups)
-                }
+                KeyCode::Char('g') => EventResult::Replace(ScreenType::ConsumerGroups),
                 KeyCode::Up => {
                     app_state.filtered_topic_state.vertical_scroll = app_state
                         .filtered_topic_state
@@ -413,10 +489,11 @@ impl Screen for MainScreen {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
                         self.load_messages_for_topic(topic.clone(), app_state);
                     }
+                    self.switch_view_mode(InputMode::ViewRecords);
                     EventResult::Handled
                 }
                 KeyCode::Tab => {
-                    self.switch_view_mode(InputMode::ViewRecords);
+                    self.switch_view_mode(InputMode::SelectGroup);
                     EventResult::Handled
                 }
                 _ => EventResult::Handled,
@@ -442,6 +519,7 @@ impl Screen for MainScreen {
                 _ => EventResult::Handled,
             },
             InputMode::ViewRecords => match key {
+                KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
                 KeyCode::Esc | KeyCode::Tab => {
                     self.switch_view_mode(InputMode::SelectTopic);
                     EventResult::Handled
@@ -461,6 +539,18 @@ impl Screen for MainScreen {
                     } else {
                         EventResult::Handled
                     }
+                }
+                _ => EventResult::Handled,
+            },
+            InputMode::SelectGroup => match key {
+                KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
+                KeyCode::Char('r') => {
+                    self.load_consumer_groups(app_state);
+                    EventResult::Handled
+                }
+                KeyCode::Tab => {
+                    self.switch_view_mode(InputMode::SelectTopic);
+                    EventResult::Handled
                 }
                 _ => EventResult::Handled,
             },

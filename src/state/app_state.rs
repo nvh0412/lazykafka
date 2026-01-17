@@ -25,7 +25,7 @@ pub struct TopicInfoState {
 // Consumer Group State
 pub struct ConsumerGroupListState {
     pub items: Vec<ConsumerGroupSummary>,
-    pub table_state: TableState,
+    pub groups: StatefulList<ConsumerGroupSummary>,
     pub vertical_scroll_state: ScrollbarState,
     pub vertical_scroll: usize,
 }
@@ -34,38 +34,10 @@ impl Default for ConsumerGroupListState {
     fn default() -> Self {
         Self {
             items: vec![],
-            table_state: TableState::default(),
+            groups: StatefulList::with_items(vec![]),
             vertical_scroll_state: ScrollbarState::default(),
             vertical_scroll: 0,
         }
-    }
-}
-
-impl ConsumerGroupListState {
-    pub fn select_next(&mut self, max: usize) {
-        if max == 0 {
-            return;
-        }
-        let i = self.table_state.selected().unwrap_or(0);
-        let next = if i >= max - 1 { 0 } else { i + 1 };
-        self.table_state.select(Some(next));
-        self.vertical_scroll = next;
-        self.vertical_scroll_state = self.vertical_scroll_state.position(next);
-    }
-
-    pub fn select_previous(&mut self, max: usize) {
-        if max == 0 {
-            return;
-        }
-        let i = self.table_state.selected().unwrap_or(0);
-        let prev = if i == 0 { max - 1 } else { i - 1 };
-        self.table_state.select(Some(prev));
-        self.vertical_scroll = prev;
-        self.vertical_scroll_state = self.vertical_scroll_state.position(prev);
-    }
-
-    pub fn selected_index(&self) -> Option<usize> {
-        self.table_state.selected()
     }
 }
 

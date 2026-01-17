@@ -171,7 +171,7 @@ impl ConsumerGroupsScreen {
             .vertical_scroll_state
             .content_length(state.items.len());
 
-        frame.render_stateful_widget(table, chunks[1], &mut state.table_state);
+        // frame.render_stateful_widget(table, chunks[1], &mut state.table_state);
         frame.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::VerticalRight),
             chunks[1],
@@ -204,88 +204,89 @@ impl Screen for ConsumerGroupsScreen {
     }
 
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
-        match self.input_mode {
-            InputMode::SelectGroup => match key {
-                KeyCode::Char('q') | KeyCode::Esc => EventResult::Replace(ScreenType::Main),
-                KeyCode::Char('/') => {
-                    self.input_mode = InputMode::SearchGroup;
-                    EventResult::Handled
-                }
-                KeyCode::Char('i') => {
-                    if let Some(group_id) = app_state.filtered_consumer_groups_state.table_state.selected() {
-                        EventResult::Push(ScreenType::ConsumerGroupDetail(group_id.to_string()))
-                    } else {
-                        EventResult::Handled
-                    }
-                }
-                KeyCode::Up => {
-                    app_state
-                        .filtered_consumer_groups_state
-                        .table_state
-                        .select_previous();
-                    app_state.filtered_consumer_groups_state.vertical_scroll = app_state
-                        .filtered_consumer_groups_state
-                        .vertical_scroll
-                        .saturating_sub(1);
-                    app_state.filtered_consumer_groups_state.vertical_scroll_state = app_state
-                        .filtered_consumer_groups_state
-                        .vertical_scroll_state
-                        .position(app_state.filtered_consumer_groups_state.vertical_scroll);
-                    EventResult::Handled
-                }
-                KeyCode::Down => {
-                    app_state.filtered_consumer_groups_state.select_next(app_state.filtered_consumer_groups_state.items.len());
-                    app_state.filtered_consumer_groups_state.vertical_scroll = app_state
-                        .filtered_consumer_groups_state
-                        .vertical_scroll
-                        .saturating_add(1);
-                    app_state.filtered_consumer_groups_state.vertical_scroll_state = app_state
-                        .filtered_consumer_groups_state
-                        .vertical_scroll_state
-                        .position(app_state.filtered_consumer_groups_state.vertical_scroll);
-                    EventResult::Handled
-                }
-                KeyCode::Enter => {
-                    if let Some(group_idx) = app_state
-                        .filtered_consumer_groups_state
-                        .table_state
-                        .selected()
-                    {
-                        let group = &app_state.filtered_consumer_groups_state.items[group_idx];
-                        EventResult::Push(ScreenType::ConsumerGroupDetail(group.group_id.clone()))
-                    } else {
-                        EventResult::Handled
-                    }
-                }
-                KeyCode::Char('r') => {
-                    self.load_consumer_groups(app_state);
-                    EventResult::Handled
-                }
-                _ => EventResult::Handled,
-            },
-            InputMode::SearchGroup => match key {
-                KeyCode::Char(c) => {
-                    app_state.consumer_group_search_query.push(c);
-                    self.update_filters(app_state);
-                    EventResult::Handled
-                }
-                KeyCode::Backspace => {
-                    app_state.consumer_group_search_query.pop();
-                    self.update_filters(app_state);
-                    EventResult::Handled
-                }
-                KeyCode::Esc => {
-                    app_state.consumer_group_search_query.clear();
-                    self.update_filters(app_state);
-                    self.input_mode = InputMode::SelectGroup;
-                    EventResult::Handled
-                }
-                KeyCode::Enter => {
-                    self.input_mode = InputMode::SelectGroup;
-                    EventResult::Handled
-                }
-                _ => EventResult::Handled,
-            },
-        }
+        EventResult::Handled
+        // match self.input_mode {
+        //     InputMode::SelectGroup => match key {
+        //         KeyCode::Char('q') | KeyCode::Esc => EventResult::Replace(ScreenType::Main),
+        //         KeyCode::Char('/') => {
+        //             self.input_mode = InputMode::SearchGroup;
+        //             EventResult::Handled
+        //         }
+        //         KeyCode::Char('i') => {
+        //             if let Some(group_id) = app_state.filtered_consumer_groups_state.table_state.selected() {
+        //                 EventResult::Push(ScreenType::ConsumerGroupDetail(group_id.to_string()))
+        //             } else {
+        //                 EventResult::Handled
+        //             }
+        //         }
+        //         KeyCode::Up => {
+        //             app_state
+        //                 .filtered_consumer_groups_state
+        //                 .table_state
+        //                 .select_previous();
+        //             app_state.filtered_consumer_groups_state.vertical_scroll = app_state
+        //                 .filtered_consumer_groups_state
+        //                 .vertical_scroll
+        //                 .saturating_sub(1);
+        //             app_state.filtered_consumer_groups_state.vertical_scroll_state = app_state
+        //                 .filtered_consumer_groups_state
+        //                 .vertical_scroll_state
+        //                 .position(app_state.filtered_consumer_groups_state.vertical_scroll);
+        //             EventResult::Handled
+        //         }
+        //         KeyCode::Down => {
+        //             app_state.filtered_consumer_groups_state.select_next(app_state.filtered_consumer_groups_state.items.len());
+        //             app_state.filtered_consumer_groups_state.vertical_scroll = app_state
+        //                 .filtered_consumer_groups_state
+        //                 .vertical_scroll
+        //                 .saturating_add(1);
+        //             app_state.filtered_consumer_groups_state.vertical_scroll_state = app_state
+        //                 .filtered_consumer_groups_state
+        //                 .vertical_scroll_state
+        //                 .position(app_state.filtered_consumer_groups_state.vertical_scroll);
+        //             EventResult::Handled
+        //         }
+        //         KeyCode::Enter => {
+        //             if let Some(group_idx) = app_state
+        //                 .filtered_consumer_groups_state
+        //                 .table_state
+        //                 .selected()
+        //             {
+        //                 let group = &app_state.filtered_consumer_groups_state.items[group_idx];
+        //                 EventResult::Push(ScreenType::ConsumerGroupDetail(group.group_id.clone()))
+        //             } else {
+        //                 EventResult::Handled
+        //             }
+        //         }
+        //         KeyCode::Char('r') => {
+        //             self.load_consumer_groups(app_state);
+        //             EventResult::Handled
+        //         }
+        //         _ => EventResult::Handled,
+        //     },
+        //     InputMode::SearchGroup => match key {
+        //         KeyCode::Char(c) => {
+        //             app_state.consumer_group_search_query.push(c);
+        //             self.update_filters(app_state);
+        //             EventResult::Handled
+        //         }
+        //         KeyCode::Backspace => {
+        //             app_state.consumer_group_search_query.pop();
+        //             self.update_filters(app_state);
+        //             EventResult::Handled
+        //         }
+        //         KeyCode::Esc => {
+        //             app_state.consumer_group_search_query.clear();
+        //             self.update_filters(app_state);
+        //             self.input_mode = InputMode::SelectGroup;
+        //             EventResult::Handled
+        //         }
+        //         KeyCode::Enter => {
+        //             self.input_mode = InputMode::SelectGroup;
+        //             EventResult::Handled
+        //         }
+        //         _ => EventResult::Handled,
+        //     },
+        // }
     }
 }
