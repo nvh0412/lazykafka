@@ -1,3 +1,4 @@
+pub mod panels;
 pub mod screen;
 pub mod screen_manager;
 pub mod screen_type;

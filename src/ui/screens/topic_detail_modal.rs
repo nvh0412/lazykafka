@@ -10,15 +10,23 @@ use ratatui::widgets::{Block, Borders, Cell, Clear, Row, Scrollbar, ScrollbarOri
 
 pub struct TopicDetailModal {
     topic_name: String,
+    scroll_offset: usize,
+    config_count: usize,
+    visible_height: u16,
 }
 
 impl TopicDetailModal {
     pub fn new(topic_name: String) -> Self {
-        Self { topic_name }
+        Self {
+            topic_name,
+            scroll_offset: 0,
+            config_count: 0,
+            visible_height: 10,
+        }
     }
 
     fn render_topic_popup(
-        &self,
+        &mut self,
         frame: &mut Frame,
         topic: &Topic,
         topic_info_state: &mut TopicInfoState,
@@ -31,10 +39,16 @@ impl TopicDetailModal {
 
         let topic_name = topic.name.clone();
 
+        // Calculate visible height (area height - borders - header - header margin)
+        self.visible_height = area.height.saturating_sub(4);
+
         let content = if let Some(config) = &topic.config {
             // Sort config entries by key name for easier reading
             let mut sorted_configs: Vec<_> = config.configs.iter().collect();
             sorted_configs.sort_by(|a, b| a.0.cmp(b.0));
+
+            // Track config count for scroll calculation
+            self.config_count = sorted_configs.len();
 
             // Create table rows from sorted config
             let rows: Vec<Row> = sorted_configs
@@ -45,6 +59,26 @@ impl TopicDetailModal {
                     Row::new(vec![Cell::from(key.as_str()), Cell::from(value_str)])
                 })
                 .collect();
+
+            // Build scroll indicator for title
+            let scroll_info = if self.config_count > 0 {
+                format!(
+                    " [{}/{}]",
+                    (self.scroll_offset + 1).min(self.config_count),
+                    self.config_count
+                )
+            } else {
+                String::new()
+            };
+
+            // Update table state selection to current scroll position
+            topic_info_state.table_state.select(Some(self.scroll_offset));
+
+            // Update scrollbar state
+            topic_info_state.scroll_state = topic_info_state
+                .scroll_state
+                .content_length(self.config_count)
+                .position(self.scroll_offset);
 
             Table::new(
                 rows,
@@ -58,11 +92,12 @@ impl TopicDetailModal {
                 .style(Style::default().fg(Color::Yellow))
                 .bottom_margin(1),
             )
+            .row_highlight_style(Style::default().bg(Color::DarkGray))
             .block(
                 Block::default()
                     .title(format!(
-                        "Topic Configuration: {} (Press Esc to close)",
-                        topic_name
+                        "Topic Configuration: {}{} (↑↓ scroll, Esc close)",
+                        topic_name, scroll_info
                     ))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Cyan)),
@@ -70,6 +105,7 @@ impl TopicDetailModal {
             .style(Style::default().fg(Color::White))
         } else {
             // Config is loading
+            self.config_count = 0;
             Table::new(
                 vec![Row::new(vec![Cell::from("Loading configuration...")])],
                 [Constraint::Percentage(100)],
@@ -77,7 +113,7 @@ impl TopicDetailModal {
             .block(
                 Block::default()
                     .title(format!(
-                        "Topic Configuration: {} (Press Esc to close)",
+                        "Topic Configuration: {} (↑↓ scroll, Esc close)",
                         topic_name
                     ))
                     .borders(Borders::ALL)
@@ -162,8 +198,34 @@ impl Screen for TopicDetailModal {
     }
 
     fn handle_key(&mut self, key: KeyCode, _app_state: &mut AppState) -> EventResult {
+        let max_scroll = self.config_count.saturating_sub(1);
+
         match key {
             KeyCode::Esc => EventResult::Action(ClosePopup),
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                EventResult::Handled
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.scroll_offset = (self.scroll_offset + 1).min(max_scroll);
+                EventResult::Handled
+            }
+            KeyCode::PageUp => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(10);
+                EventResult::Handled
+            }
+            KeyCode::PageDown => {
+                self.scroll_offset = (self.scroll_offset + 10).min(max_scroll);
+                EventResult::Handled
+            }
+            KeyCode::Home | KeyCode::Char('g') => {
+                self.scroll_offset = 0;
+                EventResult::Handled
+            }
+            KeyCode::End | KeyCode::Char('G') => {
+                self.scroll_offset = max_scroll;
+                EventResult::Handled
+            }
             _ => EventResult::Handled,
         }
     }

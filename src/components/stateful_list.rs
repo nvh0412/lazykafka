@@ -47,4 +47,14 @@ impl<T> StatefulList<T> {
     pub fn selected(&self) -> Option<&T> {
         self.state.selected().and_then(|i| self.items.get(i))
     }
+
+    pub fn unselect(&mut self) {
+        self.state.select(None);
+    }
+
+    pub fn select_first(&mut self) {
+        if !self.items.is_empty() {
+            self.state.select(Some(0));
+        }
+    }
 }

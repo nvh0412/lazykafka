@@ -1,14 +1,14 @@
 use crate::models::broker_stats::ConnectionStatus;
 use crate::models::topic::Topic;
 use crate::state::app_state::{AppMessage, AppState, ConsumerGroupListState, TopicListState};
+use crate::ui::panels::{FocusTarget, GroupDetailPanel, MainPanelType, PanelResult, RecordsPanel};
 use crate::ui::screen::{AppAction, EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
 use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, List, ListItem, Paragraph, Row, Scrollbar,
-    ScrollbarOrientation, Table, TableState,
+    Block, BorderType, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation,
 };
 use ratatui::Frame;
 use std::time::Duration;
@@ -17,19 +17,23 @@ pub enum InputMode {
     SelectTopic,
     SelectGroup,
     SearchTopic,
-    ViewRecords,
+    PanelFocused,
 }
 
 pub struct MainScreen {
     input_mode: InputMode,
-    records_table_state: TableState,
+    current_panel: MainPanelType,
+    records_panel: RecordsPanel,
+    group_detail_panel: Option<GroupDetailPanel>,
 }
 
 impl MainScreen {
     pub fn new() -> Self {
         Self {
             input_mode: InputMode::SelectTopic,
-            records_table_state: TableState::default().with_selected(0),
+            current_panel: MainPanelType::default(),
+            records_panel: RecordsPanel::new(),
+            group_detail_panel: None,
         }
     }
 
@@ -54,7 +58,7 @@ impl MainScreen {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(25), // Topics sidebar
-                Constraint::Percentage(75), // Messages + filter
+                Constraint::Percentage(75), // Main panel
             ])
             .split(area);
 
@@ -94,7 +98,22 @@ impl MainScreen {
 
         self.render_stats(frame, left_pillars[3], app_state);
 
-        self.render_messages_panel(frame, body[1], app_state);
+        self.render_main_panel(frame, body[1], app_state);
+    }
+
+    fn render_main_panel(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+        let is_focused = matches!(self.input_mode, InputMode::PanelFocused);
+
+        match &self.current_panel {
+            MainPanelType::Records => {
+                self.records_panel.render(frame, area, app_state, is_focused);
+            }
+            MainPanelType::GroupDetail(_) => {
+                if let Some(panel) = &mut self.group_detail_panel {
+                    panel.render(frame, area, app_state, is_focused);
+                }
+            }
+        }
     }
 
     fn render_stats(&self, frame: &mut Frame, area: Rect, app_state: &AppState) {
@@ -255,65 +274,26 @@ impl MainScreen {
         );
     }
 
-    fn next_record_row(&mut self) {
-        let i = self.records_table_state.selected().unwrap_or(0);
-        self.records_table_state.select(Some(i.saturating_add(1)));
-    }
-
-    fn previous_record_row(&mut self) {
-        let i = self.records_table_state.selected().unwrap_or(0);
-        self.records_table_state.select(Some(i.saturating_sub(1)));
-    }
-
-    fn render_messages_panel(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
-        let rows = app_state.records.items.iter().map(|data| {
-            let item = data.ref_array();
-            item.into_iter()
-                .map(|content| ratatui::widgets::Cell::from(format!("\n{content}\n")))
-                .collect::<Row>()
-                .height(3)
-        });
-
-        let list_style = match self.input_mode {
-            InputMode::ViewRecords => Style::default().fg(Color::LightGreen),
-            _ => Style::default().fg(Color::White),
+    fn render_footer(&self, frame: &mut Frame, area: Rect, _app_state: &mut AppState) {
+        let hint_text = match self.input_mode {
+            InputMode::SelectTopic => {
+                "<esc>: Cancel | q: Quit | <tab>: Switch panel | /: Search | i: Info | d: Delete | <enter>: View records"
+            }
+            InputMode::SelectGroup => {
+                "<esc>: Cancel | q: Quit | <tab>: Switch panel | r: Refresh | <enter>: View details"
+            }
+            InputMode::SearchTopic => "<esc>: Cancel | <enter>: Confirm search",
+            InputMode::PanelFocused => match &self.current_panel {
+                MainPanelType::Records => {
+                    "<esc>/<tab>: Back to sidebar | q: Quit | j/k: Navigate | i: View detail"
+                }
+                MainPanelType::GroupDetail(_) => {
+                    "<esc>: Back to sidebar | <tab>/<left>/<right>: Switch tab | r: Refresh | j/k: Navigate"
+                }
+            },
         };
 
-        let header = ["Key", "Partition", "Timestamp", "Offset", "Value"]
-            .into_iter()
-            .map(|t| Cell::from(format!("{}", t)))
-            .collect::<Row>()
-            .height(1);
-
-        let selected_row_style = Style::default()
-            .bg(Color::Blue)
-            .fg(Color::White)
-            .add_modifier(Modifier::BOLD);
-
-        let t = Table::new::<_, [Constraint; 5]>(
-            rows,
-            [
-                Constraint::Length(30),
-                Constraint::Length(10),
-                Constraint::Length(10),
-                Constraint::Length(10),
-                Constraint::Min(0),
-            ],
-        )
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Records")
-                .border_style(list_style),
-        )
-        .header(header)
-        .row_highlight_style(selected_row_style);
-
-        frame.render_stateful_widget(t, area, &mut self.records_table_state);
-    }
-
-    fn render_footer(&self, frame: &mut Frame, area: Rect, _app_state: &mut AppState) {
-        let p = Paragraph::new("<esc>: Cancel, q: Quit, <tab>: Switch panel")
+        let p = Paragraph::new(hint_text)
             .block(Block::default())
             .style(Style::default().fg(Color::LightBlue));
 
@@ -352,8 +332,52 @@ impl MainScreen {
         });
     }
 
-    fn switch_view_mode(&mut self, input_mode: InputMode) {
+    fn switch_view_mode(&mut self, input_mode: InputMode, app_state: &mut AppState) {
+        // Unselect previous list and select new list based on mode transition
+        match (&self.input_mode, &input_mode) {
+            (InputMode::SelectTopic, InputMode::SelectGroup) => {
+                // Switching from Topics to Groups
+                app_state.filtered_topic_state.topics.unselect();
+                app_state.filtered_consumer_groups_state.groups.select_first();
+            }
+            (InputMode::SelectGroup, InputMode::SelectTopic) => {
+                // Switching from Groups to Topics
+                app_state.filtered_consumer_groups_state.groups.unselect();
+                app_state.filtered_topic_state.topics.select_first();
+            }
+            (InputMode::PanelFocused, InputMode::SelectTopic) => {
+                // Returning to Topics from panel
+                app_state.filtered_consumer_groups_state.groups.unselect();
+                app_state.filtered_topic_state.topics.select_first();
+            }
+            (InputMode::PanelFocused, InputMode::SelectGroup) => {
+                // Returning to Groups from panel
+                app_state.filtered_topic_state.topics.unselect();
+                app_state.filtered_consumer_groups_state.groups.select_first();
+            }
+            _ => {}
+        }
         self.input_mode = input_mode;
+    }
+
+    fn switch_panel(&mut self, panel_type: MainPanelType) {
+        // Clean up previous panel if needed
+        if !matches!(panel_type, MainPanelType::GroupDetail(_)) {
+            self.group_detail_panel = None;
+        }
+
+        // Set up new panel
+        match &panel_type {
+            MainPanelType::Records => {
+                // Records panel is always available
+            }
+            MainPanelType::GroupDetail(group_id) => {
+                self.group_detail_panel = Some(GroupDetailPanel::new(group_id.clone()));
+            }
+        }
+
+        self.current_panel = panel_type;
+        self.input_mode = InputMode::PanelFocused;
     }
 
     fn update_filters(&mut self, app_state: &mut AppState) {
@@ -414,6 +438,27 @@ impl MainScreen {
             }
         });
     }
+
+    fn handle_panel_result(&mut self, result: PanelResult, app_state: &mut AppState) -> EventResult {
+        match result {
+            PanelResult::Handled => EventResult::Handled,
+            PanelResult::SwitchFocus(target) => {
+                match target {
+                    FocusTarget::Topics => {
+                        self.switch_view_mode(InputMode::SelectTopic, app_state);
+                        // Switch back to Records panel when returning to topics
+                        self.current_panel = MainPanelType::Records;
+                        self.group_detail_panel = None;
+                    }
+                    FocusTarget::Groups => {
+                        self.switch_view_mode(InputMode::SelectGroup, app_state);
+                    }
+                }
+                EventResult::Handled
+            }
+            PanelResult::ShowModal(screen_type) => EventResult::Push(screen_type),
+        }
+    }
 }
 
 impl Screen for MainScreen {
@@ -441,7 +486,7 @@ impl Screen for MainScreen {
             InputMode::SelectTopic => match key {
                 KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
                 KeyCode::Char('/') => {
-                    self.switch_view_mode(InputMode::SearchTopic);
+                    self.switch_view_mode(InputMode::SearchTopic, app_state);
                     EventResult::Handled
                 }
                 KeyCode::Char('i') => {
@@ -489,11 +534,11 @@ impl Screen for MainScreen {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
                         self.load_messages_for_topic(topic.clone(), app_state);
                     }
-                    self.switch_view_mode(InputMode::ViewRecords);
+                    self.switch_panel(MainPanelType::Records);
                     EventResult::Handled
                 }
                 KeyCode::Tab => {
-                    self.switch_view_mode(InputMode::SelectGroup);
+                    self.switch_view_mode(InputMode::SelectGroup, app_state);
                     EventResult::Handled
                 }
                 _ => EventResult::Handled,
@@ -509,39 +554,35 @@ impl Screen for MainScreen {
                 }
                 KeyCode::Esc => {
                     self.on_reset_filters(app_state);
-                    self.switch_view_mode(InputMode::SelectTopic);
+                    self.switch_view_mode(InputMode::SelectTopic, app_state);
                     EventResult::Handled
                 }
                 KeyCode::Enter => {
-                    self.switch_view_mode(InputMode::SelectTopic);
+                    self.switch_view_mode(InputMode::SelectTopic, app_state);
                     EventResult::Handled
                 }
                 _ => EventResult::Handled,
             },
-            InputMode::ViewRecords => match key {
-                KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
-                KeyCode::Esc | KeyCode::Tab => {
-                    self.switch_view_mode(InputMode::SelectTopic);
-                    EventResult::Handled
+            InputMode::PanelFocused => {
+                // First check for quit command
+                if matches!(key, KeyCode::Char('q')) {
+                    return EventResult::Action(AppAction::ConfirmExitApp);
                 }
-                KeyCode::Up => {
-                    self.previous_record_row();
-                    EventResult::Handled
-                }
-                KeyCode::Down => {
-                    self.next_record_row();
-                    EventResult::Handled
-                }
-                KeyCode::Char('i') => {
-                    if let Some(record_idx) = self.records_table_state.selected() {
-                        let record = app_state.records.items[record_idx].clone();
-                        EventResult::Push(ScreenType::MessageDetail(record))
-                    } else {
-                        EventResult::Handled
+
+                // Dispatch to current panel
+                let result = match &self.current_panel {
+                    MainPanelType::Records => self.records_panel.handle_key(key, app_state),
+                    MainPanelType::GroupDetail(_) => {
+                        if let Some(panel) = &mut self.group_detail_panel {
+                            panel.handle_key(key, app_state)
+                        } else {
+                            PanelResult::Handled
+                        }
                     }
-                }
-                _ => EventResult::Handled,
-            },
+                };
+
+                self.handle_panel_result(result, app_state)
+            }
             InputMode::SelectGroup => match key {
                 KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
                 KeyCode::Char('r') => {
@@ -549,7 +590,24 @@ impl Screen for MainScreen {
                     EventResult::Handled
                 }
                 KeyCode::Tab => {
-                    self.switch_view_mode(InputMode::SelectTopic);
+                    self.switch_view_mode(InputMode::SelectTopic, app_state);
+                    EventResult::Handled
+                }
+                KeyCode::Up => {
+                    app_state.filtered_consumer_groups_state.groups.previous();
+                    EventResult::Handled
+                }
+                KeyCode::Down => {
+                    app_state.filtered_consumer_groups_state.groups.next();
+                    EventResult::Handled
+                }
+                KeyCode::Enter => {
+                    if let Some(group) =
+                        app_state.filtered_consumer_groups_state.groups.selected()
+                    {
+                        let group_id = group.group_id.clone();
+                        self.switch_panel(MainPanelType::GroupDetail(group_id));
+                    }
                     EventResult::Handled
                 }
                 _ => EventResult::Handled,

@@ -1,3 +1,4 @@
+use clap::Parser;
 use ratatui::{
     Terminal,
     crossterm::{
@@ -10,14 +11,15 @@ use ratatui::{
 use std::{
     io::{self, Result},
     sync::Arc,
+    time::Duration,
 };
-use std::time::Duration;
 use ratatui::crossterm::event::poll;
 use tokio::sync::RwLock;
 
-use crate::{app::App, client_builder::ClientBuilder};
+use crate::{app::App, cli::Args, client_builder::ClientBuilder};
 
 mod app;
+mod cli;
 mod client;
 mod client_builder;
 mod connection;
@@ -32,8 +34,12 @@ mod ui;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Args::parse();
+
     let client = ClientBuilder::new()
-        .brokers(vec!["localhost:9092"])
+        .brokers(args.get_brokers())
+        .client_id(&args.client_id)
+        .connection_timeout(args.connection_timeout())
         .build()
         .await
         .unwrap();
