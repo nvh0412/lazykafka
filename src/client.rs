@@ -1,6 +1,9 @@
 use std::time::Duration;
 
+use tokio::sync::mpsc;
+
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
+use crate::models::protocol_log::ProtocolLogMessage;
 
 use crate::protocol::create_partitions::{CreatePartitionsRequest, CreatePartitionsResponse};
 use crate::protocol::delete_topics::{DeleteTopicsRequest, DeleteTopicsResponse};
@@ -52,9 +55,14 @@ pub struct KafkaClient {
 }
 
 impl KafkaClient {
+    /// Set the protocol logger for the connection
+    pub fn set_logger(&mut self, tx: mpsc::UnboundedSender<ProtocolLogMessage>) {
+        self.connection.set_logger(tx);
+    }
+
     pub fn get_stats(&self) -> BrokerStats {
         BrokerStats {
-            broker: "localhost:9092".to_string(),
+            broker: self.connection.broker_address().to_string(),
             status: if self.connection.is_connected() {
                 ConnectionStatus::Connected
             } else {

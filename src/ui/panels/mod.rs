@@ -1,8 +1,10 @@
 pub mod group_detail_panel;
+pub mod logs_panel;
 pub mod panel_type;
 pub mod records_panel;
 
 pub use group_detail_panel::GroupDetailPanel;
+pub use logs_panel::LogsPanel;
 pub use panel_type::MainPanelType;
 pub use records_panel::RecordsPanel;
 

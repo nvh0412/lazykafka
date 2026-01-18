@@ -1,6 +1,7 @@
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc};
 
+use crate::models::protocol_log::ProtocolLogMessage;
 use crate::state::app_state::{AppMessage, AppState};
 use crate::ui::screen::{AppAction, ConfirmAction, EventResult};
 use crate::ui::screen_manager::ScreenManager;
@@ -10,15 +11,30 @@ use crate::{client::KafkaClient, components::stateful_list::StatefulList};
 pub struct App {
     pub screen_manager: ScreenManager,
     pub state: AppState,
+    /// Receiver for protocol log messages
+    protocol_log_rx: mpsc::UnboundedReceiver<ProtocolLogMessage>,
 }
 
 impl App {
     pub fn new(kafka_client: Arc<RwLock<KafkaClient>>) -> Self {
+        // Create protocol log channel
+        let (protocol_log_tx, protocol_log_rx) = mpsc::unbounded_channel();
+
+        // Set logger on the client (blocking call since we need the client to be ready)
+        {
+            let client = kafka_client.clone();
+            tokio::spawn(async move {
+                let mut client = client.write().await;
+                client.set_logger(protocol_log_tx);
+            });
+        }
+
         let mut state = AppState::default(kafka_client);
         let screen_manager = ScreenManager::default(&mut state);
         Self {
             state,
             screen_manager,
+            protocol_log_rx,
         }
     }
 
@@ -131,7 +147,80 @@ impl App {
                 AppMessage::CreatePartitionsError(_err) => {
                     // Could display error to user here in the future
                 }
-                _ => {}
+                AppMessage::ProtocolLog(log_msg) => {
+                    // Handle protocol log messages
+                    match log_msg {
+                        ProtocolLogMessage::Request {
+                            api_type,
+                            api_version,
+                            correlation_id,
+                            broker,
+                            bytes,
+                            summary,
+                        } => {
+                            self.state.protocol_log_state.add_request(
+                                api_type,
+                                api_version,
+                                correlation_id,
+                                broker,
+                                bytes,
+                                summary,
+                            );
+                        }
+                        ProtocolLogMessage::Response {
+                            correlation_id,
+                            bytes,
+                            error_code,
+                            summary,
+                        } => {
+                            self.state.protocol_log_state.add_response(
+                                correlation_id,
+                                bytes,
+                                error_code,
+                                summary,
+                            );
+                        }
+                    }
+                }
+                AppMessage::ConsumerGroupError(_) => {
+                    // Consumer group error - could display to user
+                }
+            }
+        }
+
+        // Handle protocol log messages from the dedicated channel
+        while let Ok(log_msg) = self.protocol_log_rx.try_recv() {
+            match log_msg {
+                ProtocolLogMessage::Request {
+                    api_type,
+                    api_version,
+                    correlation_id,
+                    broker,
+                    bytes,
+                    summary,
+                } => {
+                    self.state.protocol_log_state.add_request(
+                        api_type,
+                        api_version,
+                        correlation_id,
+                        broker,
+                        bytes,
+                        summary,
+                    );
+                }
+                ProtocolLogMessage::Response {
+                    correlation_id,
+                    bytes,
+                    error_code,
+                    summary,
+                } => {
+                    self.state.protocol_log_state.add_response(
+                        correlation_id,
+                        bytes,
+                        error_code,
+                        summary,
+                    );
+                }
             }
         }
     }

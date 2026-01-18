@@ -4,10 +4,12 @@ use socket2::{Socket, TcpKeepalive};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    sync::mpsc,
     time::timeout,
 };
 
 use crate::error::{KafkaError, Result};
+use crate::models::protocol_log::{ApiType, ProtocolLogMessage};
 
 // ============================================================================
 // Connection State Management
@@ -28,6 +30,8 @@ pub struct KafkaConnection {
     /// Track bytes sent/received for debugging
     bytes_sent: usize,
     bytes_received: usize,
+    /// Optional channel for protocol logging
+    log_tx: Option<mpsc::UnboundedSender<ProtocolLogMessage>>,
 }
 
 impl KafkaConnection {
@@ -39,6 +43,79 @@ impl KafkaConnection {
             correlation_id: 0,
             bytes_sent: 0,
             bytes_received: 0,
+            log_tx: None,
+        }
+    }
+
+    /// Set the protocol logger channel
+    pub fn set_logger(&mut self, tx: mpsc::UnboundedSender<ProtocolLogMessage>) {
+        self.log_tx = Some(tx);
+    }
+
+    /// Get the broker address
+    pub fn broker_address(&self) -> &str {
+        &self.broker_address
+    }
+
+    /// Parse request header to extract API key, version, and correlation ID
+    /// Kafka request header format: size(4) + api_key(2) + api_version(2) + correlation_id(4) + ...
+    fn parse_request_header(&self, request: &[u8]) -> Option<(i16, i16, i32)> {
+        if request.len() < 12 {
+            return None;
+        }
+        // Skip size (4 bytes), read api_key (2 bytes)
+        let api_key = i16::from_be_bytes([request[4], request[5]]);
+        let api_version = i16::from_be_bytes([request[6], request[7]]);
+        let correlation_id = i32::from_be_bytes([request[8], request[9], request[10], request[11]]);
+        Some((api_key, api_version, correlation_id))
+    }
+
+    /// Generate a summary for a request based on API type
+    fn generate_request_summary(&self, api_type: ApiType) -> String {
+        match api_type {
+            ApiType::Metadata => "Refreshing metadata".to_string(),
+            ApiType::Fetch => "Fetching messages".to_string(),
+            ApiType::ListOffset => "Listing offsets".to_string(),
+            ApiType::ApiVersions => "Getting API versions".to_string(),
+            ApiType::FindCoordinator => "Finding coordinator".to_string(),
+            ApiType::ListGroups => "Listing groups".to_string(),
+            ApiType::DescribeGroups => "Describing groups".to_string(),
+            ApiType::OffsetFetch => "Fetching offsets".to_string(),
+            ApiType::DescribeConfigs => "Describing configs".to_string(),
+            ApiType::DeleteTopics => "Deleting topics".to_string(),
+            ApiType::CreatePartitions => "Creating partitions".to_string(),
+            ApiType::Unknown(key) => format!("Unknown API {}", key),
+        }
+    }
+
+    /// Log a request if logging is enabled
+    fn log_request(&self, request: &[u8]) {
+        if let Some(tx) = &self.log_tx {
+            if let Some((api_key, api_version, correlation_id)) = self.parse_request_header(request) {
+                let api_type = ApiType::from_api_key(api_key);
+                let summary = self.generate_request_summary(api_type);
+                let _ = tx.send(ProtocolLogMessage::Request {
+                    api_type,
+                    api_version,
+                    correlation_id,
+                    broker: self.broker_address.clone(),
+                    bytes: request.len(),
+                    summary,
+                });
+            }
+        }
+    }
+
+    /// Log a response if logging is enabled
+    fn log_response(&self, correlation_id: i32, response: &[u8], error_code: Option<i16>) {
+        if let Some(tx) = &self.log_tx {
+            let summary = format!("{} bytes", response.len());
+            let _ = tx.send(ProtocolLogMessage::Response {
+                correlation_id,
+                bytes: response.len(),
+                error_code,
+                summary,
+            });
         }
     }
 
@@ -168,6 +245,9 @@ impl KafkaConnection {
             ));
         }
 
+        // Log the request before sending
+        self.log_request(request);
+
         let stream = self
             .stream
             .as_mut()
@@ -271,6 +351,14 @@ impl KafkaConnection {
         match timeout(timeout_duration, stream.read_exact(&mut response)).await {
             Ok(Ok(_)) => {
                 self.bytes_received += 4 + size;
+
+                // Log the response (correlation_id is the first 4 bytes)
+                if response.len() >= 4 {
+                    let correlation_id = i32::from_be_bytes([response[0], response[1], response[2], response[3]]);
+                    // For error code, we'd need to know the API type - for now pass None
+                    self.log_response(correlation_id, &response, None);
+                }
+
                 Ok(response)
             }
             Ok(Err(e)) => {

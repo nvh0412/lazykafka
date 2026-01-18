@@ -3,10 +3,12 @@ use crate::components::stateful_list::StatefulList;
 use crate::error::KafkaError;
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 use crate::models::consumer_group::{ConsumerGroupDetail, ConsumerGroupSummary};
+use crate::models::protocol_log::ProtocolLogMessage;
 use crate::models::topic::{Topic, TopicConfig};
 use crate::protocol::record::Record;
 use crate::repository::RepositoryManager;
 use crate::state::filter::FilterState;
+use crate::state::protocol_log_state::ProtocolLogState;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
@@ -81,6 +83,8 @@ pub enum AppMessage {
     // Partition messages
     PartitionsCreated { topic: String, new_count: i32 },
     CreatePartitionsError(String),
+    // Protocol log messages
+    ProtocolLog(ProtocolLogMessage),
 }
 
 #[allow(dead_code)]
@@ -103,6 +107,8 @@ pub struct AppState {
     pub filtered_consumer_groups_state: ConsumerGroupListState,
     pub consumer_group_detail_state: ConsumerGroupDetailState,
     pub consumer_group_search_query: String,
+    // Protocol log state
+    pub protocol_log_state: ProtocolLogState,
 }
 
 impl AppState {
@@ -140,6 +146,8 @@ impl AppState {
             filtered_consumer_groups_state: ConsumerGroupListState::default(),
             consumer_group_detail_state: ConsumerGroupDetailState::default(),
             consumer_group_search_query: String::new(),
+            // Protocol log state
+            protocol_log_state: ProtocolLogState::default(),
         }
     }
 }

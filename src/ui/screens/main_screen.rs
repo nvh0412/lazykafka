@@ -1,7 +1,7 @@
 use crate::models::broker_stats::ConnectionStatus;
 use crate::models::topic::Topic;
 use crate::state::app_state::{AppMessage, AppState, ConsumerGroupListState, TopicListState};
-use crate::ui::panels::{FocusTarget, GroupDetailPanel, MainPanelType, PanelResult, RecordsPanel};
+use crate::ui::panels::{FocusTarget, GroupDetailPanel, LogsPanel, MainPanelType, PanelResult, RecordsPanel};
 use crate::ui::screen::{AppAction, EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
 use ratatui::crossterm::event::KeyCode;
@@ -18,6 +18,7 @@ pub enum InputMode {
     SelectGroup,
     SearchTopic,
     PanelFocused,
+    LogsFocused,
 }
 
 pub struct MainScreen {
@@ -25,6 +26,7 @@ pub struct MainScreen {
     current_panel: MainPanelType,
     records_panel: RecordsPanel,
     group_detail_panel: Option<GroupDetailPanel>,
+    logs_panel: LogsPanel,
 }
 
 impl MainScreen {
@@ -34,6 +36,7 @@ impl MainScreen {
             current_panel: MainPanelType::default(),
             records_panel: RecordsPanel::new(),
             group_detail_panel: None,
+            logs_panel: LogsPanel::new(),
         }
     }
 
@@ -102,15 +105,25 @@ impl MainScreen {
     }
 
     fn render_main_panel(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
+        let chunks = Layout::default().direction(Direction::Vertical).constraints(
+            [
+                Constraint::Min(0),
+                Constraint::Percentage(20)
+            ]
+        ).split(area);
+
+        self.logs_panel.is_focused = matches!(self.input_mode, InputMode::LogsFocused);
+        self.logs_panel.render(frame, chunks[1], app_state);
+
         let is_focused = matches!(self.input_mode, InputMode::PanelFocused);
 
         match &self.current_panel {
             MainPanelType::Records => {
-                self.records_panel.render(frame, area, app_state, is_focused);
+                self.records_panel.render(frame, chunks[0], app_state, is_focused);
             }
             MainPanelType::GroupDetail(_) => {
                 if let Some(panel) = &mut self.group_detail_panel {
-                    panel.render(frame, area, app_state, is_focused);
+                    panel.render(frame, chunks[0], app_state, is_focused);
                 }
             }
         }
@@ -277,20 +290,23 @@ impl MainScreen {
     fn render_footer(&self, frame: &mut Frame, area: Rect, _app_state: &mut AppState) {
         let hint_text = match self.input_mode {
             InputMode::SelectTopic => {
-                "<esc>: Cancel | q: Quit | <tab>: Switch | /: Search | i: Info | p: Partitions | d: Delete | <enter>: View"
+                "q: Quit | <tab>: Switch | /: Search | l: Logs | i: Info | p: Partitions | d: Delete | <enter>: View"
             }
             InputMode::SelectGroup => {
-                "<esc>: Cancel | q: Quit | <tab>: Switch panel | r: Refresh | <enter>: View details"
+                "q: Quit | <tab>: Switch | l: Logs | r: Refresh | <enter>: View details"
             }
             InputMode::SearchTopic => "<esc>: Cancel | <enter>: Confirm search",
             InputMode::PanelFocused => match &self.current_panel {
                 MainPanelType::Records => {
-                    "<esc>/<tab>: Back to sidebar | q: Quit | j/k: Navigate | i: View detail"
+                    "<esc>/<tab>: Back | q: Quit | l: Logs | j/k: Navigate | i: View detail"
                 }
                 MainPanelType::GroupDetail(_) => {
-                    "<esc>: Back to sidebar | <tab>/<left>/<right>: Switch tab | r: Refresh | j/k: Navigate"
+                    "<esc>: Back | <tab>: Switch tab | l: Logs | r: Refresh | j/k: Navigate"
                 }
             },
+            InputMode::LogsFocused => {
+                "<esc>/l: Exit logs | j/k: Scroll | g/G: Top/Bottom | p: Pause | c: Clear | f: Filter"
+            }
         };
 
         let p = Paragraph::new(hint_text)
@@ -466,12 +482,13 @@ impl Screen for MainScreen {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),    // Body
-                Constraint::Length(1), // Footer
+                Constraint::Min(0),        // Body + Logs
+                Constraint::Length(1),     // Footer
             ])
             .split(frame.area());
 
         self.render_body(frame, chunks[0], app_state);
+
         self.render_footer(frame, chunks[1], app_state);
     }
 
@@ -485,6 +502,10 @@ impl Screen for MainScreen {
         match self.input_mode {
             InputMode::SelectTopic => match key {
                 KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
+                KeyCode::Char('l') => {
+                    self.input_mode = InputMode::LogsFocused;
+                    EventResult::Handled
+                }
                 KeyCode::Char('/') => {
                     self.switch_view_mode(InputMode::SearchTopic, app_state);
                     EventResult::Handled
@@ -579,6 +600,12 @@ impl Screen for MainScreen {
                     return EventResult::Action(AppAction::ConfirmExitApp);
                 }
 
+                // Check for logs panel focus
+                if matches!(key, KeyCode::Char('l')) {
+                    self.input_mode = InputMode::LogsFocused;
+                    return EventResult::Handled;
+                }
+
                 // Dispatch to current panel
                 let result = match &self.current_panel {
                     MainPanelType::Records => self.records_panel.handle_key(key, app_state),
@@ -595,6 +622,10 @@ impl Screen for MainScreen {
             }
             InputMode::SelectGroup => match key {
                 KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
+                KeyCode::Char('l') => {
+                    self.input_mode = InputMode::LogsFocused;
+                    EventResult::Handled
+                }
                 KeyCode::Char('r') => {
                     self.load_consumer_groups(app_state);
                     EventResult::Handled
@@ -622,6 +653,36 @@ impl Screen for MainScreen {
                 }
                 _ => EventResult::Handled,
             },
+            InputMode::LogsFocused => {
+                // Check for quit command
+                if matches!(key, KeyCode::Char('q')) {
+                    return EventResult::Action(AppAction::ConfirmExitApp);
+                }
+
+                // Dispatch to logs panel
+                let result = self.logs_panel.handle_key(key, app_state);
+
+                // If logs panel returned that it's no longer focused, switch back
+                if !self.logs_panel.is_focused {
+                    self.input_mode = InputMode::SelectTopic;
+                }
+
+                match result {
+                    PanelResult::Handled => EventResult::Handled,
+                    PanelResult::SwitchFocus(target) => {
+                        match target {
+                            FocusTarget::Topics => {
+                                self.switch_view_mode(InputMode::SelectTopic, app_state);
+                            }
+                            FocusTarget::Groups => {
+                                self.switch_view_mode(InputMode::SelectGroup, app_state);
+                            }
+                        }
+                        EventResult::Handled
+                    }
+                    PanelResult::ShowModal(screen_type) => EventResult::Push(screen_type),
+                }
+            }
         }
     }
 }
