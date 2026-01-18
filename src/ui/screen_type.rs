@@ -4,6 +4,7 @@ use crate::ui::screens::confirm_delete_topic_dialog::ConfirmDeleteTopicDialogMod
 use crate::ui::screens::confirm_dialog_modal::ConfirmDialogModal;
 use crate::ui::screens::consumer_group_detail_modal::ConsumerGroupDetailModal;
 use crate::ui::screens::consumer_groups_screen::ConsumerGroupsScreen;
+use crate::ui::screens::create_partitions_modal::CreatePartitionsModal;
 use crate::ui::screens::main_screen::MainScreen;
 use crate::ui::screens::record_detail_modal::RecordDetailModal;
 use crate::ui::screens::topic_detail_modal::TopicDetailModal;
@@ -20,6 +21,11 @@ pub enum ScreenType {
     // Consumer group screens
     ConsumerGroups,
     ConsumerGroupDetail(String),
+    // Topic partition screen
+    CreatePartitionsDialog {
+        topic_name: String,
+        current_partitions: i32,
+    },
 }
 
 pub fn create_screen(screen_type: ScreenType) -> Box<dyn Screen> {
@@ -37,6 +43,10 @@ pub fn create_screen(screen_type: ScreenType) -> Box<dyn Screen> {
         ScreenType::ConsumerGroupDetail(group_id) => {
             Box::new(ConsumerGroupDetailModal::new(group_id))
         }
+        ScreenType::CreatePartitionsDialog {
+            topic_name,
+            current_partitions,
+        } => Box::new(CreatePartitionsModal::new(topic_name, current_partitions)),
         _ => unimplemented!(),
     }
 }

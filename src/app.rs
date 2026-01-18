@@ -43,6 +43,10 @@ impl App {
                     self.screen_manager.pop(&mut self.state);
                     true
                 }
+                AppAction::PartitionsCreated { .. } => {
+                    self.screen_manager.pop(&mut self.state);
+                    true
+                }
             },
             EventResult::Push(screen_type) => {
                 self.screen_manager
@@ -118,6 +122,14 @@ impl App {
                 }
                 AppMessage::ConsumerGroupDetailLoaded(detail) => {
                     self.state.consumer_group_detail_state.detail = Some(detail);
+                }
+                AppMessage::PartitionsCreated { topic: _, new_count: _ } => {
+                    // Partitions were successfully created
+                    // The topic list will be refreshed when the user navigates or presses refresh
+                    // For now, we just acknowledge the success
+                }
+                AppMessage::CreatePartitionsError(_err) => {
+                    // Could display error to user here in the future
                 }
                 _ => {}
             }

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 
+use crate::protocol::create_partitions::{CreatePartitionsRequest, CreatePartitionsResponse};
 use crate::protocol::delete_topics::{DeleteTopicsRequest, DeleteTopicsResponse};
 use crate::protocol::describe_configs::{
     DescribeConfigsRequest, DescribeConfigsResource, DescribeConfigsResponse, ResourceType,
@@ -288,6 +289,56 @@ impl KafkaClient {
         if response.correlation_id != correlation_id {
             return Err(KafkaError::InvalidResponse {
                 expected: format!("correlation_id: {}", correlation_id),
+                actual: format!("correlation_id: {}", response.correlation_id),
+            });
+        }
+
+        Ok(response)
+    }
+
+    /// Create additional partitions for a topic
+    pub async fn create_partitions(
+        &mut self,
+        topic_name: String,
+        new_partition_count: i32,
+        timeout_ms: i32,
+    ) -> Result<CreatePartitionsResponse> {
+        match self
+            .create_partitions_internal(topic_name.clone(), new_partition_count, timeout_ms)
+            .await
+        {
+            Ok(response) => Ok(response),
+            Err(e) if Self::is_connection_error(&e) => {
+                self.reconnect().await?;
+                self.create_partitions_internal(topic_name, new_partition_count, timeout_ms)
+                    .await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn create_partitions_internal(
+        &mut self,
+        topic_name: String,
+        new_partition_count: i32,
+        timeout_ms: i32,
+    ) -> Result<CreatePartitionsResponse> {
+        let correlation_id = self.connection.next_correlation_id();
+        let request =
+            CreatePartitionsRequest::new(correlation_id, topic_name, new_partition_count, timeout_ms);
+
+        self.connection.send_request(&request.encode()).await?;
+
+        let response_bytes =
+            tokio::time::timeout(self.config.request_timeout, self.connection.read_response())
+                .await
+                .map_err(|_| KafkaError::ConnectionFailed("Request timeout".to_string()))??;
+
+        let response = CreatePartitionsResponse::decode(&response_bytes)?;
+
+        if response.correlation_id != correlation_id {
+            return Err(KafkaError::InvalidResponse {
+                expected: format!("correlation_id {}", correlation_id),
                 actual: format!("correlation_id: {}", response.correlation_id),
             });
         }

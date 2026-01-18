@@ -78,6 +78,9 @@ pub enum AppMessage {
     ConsumerGroupsLoaded(Vec<ConsumerGroupSummary>),
     ConsumerGroupDetailLoaded(ConsumerGroupDetail),
     ConsumerGroupError(String),
+    // Partition messages
+    PartitionsCreated { topic: String, new_count: i32 },
+    CreatePartitionsError(String),
 }
 
 #[allow(dead_code)]

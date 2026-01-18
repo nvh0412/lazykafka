@@ -15,6 +15,7 @@ pub mod offset_fetch;
 pub mod record;
 pub mod record_batch;
 pub mod request_header;
+pub mod create_partitions;
 mod create_topics;
 
 pub trait ProtocolRequest {

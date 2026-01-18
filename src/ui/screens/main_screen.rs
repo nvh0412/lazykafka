@@ -277,7 +277,7 @@ impl MainScreen {
     fn render_footer(&self, frame: &mut Frame, area: Rect, _app_state: &mut AppState) {
         let hint_text = match self.input_mode {
             InputMode::SelectTopic => {
-                "<esc>: Cancel | q: Quit | <tab>: Switch panel | /: Search | i: Info | d: Delete | <enter>: View records"
+                "<esc>: Cancel | q: Quit | <tab>: Switch | /: Search | i: Info | p: Partitions | d: Delete | <enter>: View"
             }
             InputMode::SelectGroup => {
                 "<esc>: Cancel | q: Quit | <tab>: Switch panel | r: Refresh | <enter>: View details"
@@ -500,6 +500,16 @@ impl Screen for MainScreen {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
                         EventResult::Push(ScreenType::ConfirmDeleteTopicDialog {
                             topic_name: topic.name.clone(),
+                        })
+                    } else {
+                        EventResult::Handled
+                    }
+                }
+                KeyCode::Char('p') => {
+                    if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
+                        EventResult::Push(ScreenType::CreatePartitionsDialog {
+                            topic_name: topic.name.clone(),
+                            current_partitions: topic.partitions.len() as i32,
                         })
                     } else {
                         EventResult::Handled
