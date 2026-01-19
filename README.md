@@ -75,6 +75,25 @@ Keep an eye on your connection and cluster stats.
 
 ## Installation
 
+### From releases
+
+Download the executable file compatible with your OS from the releases page here.
+
+https://github.com/nvh0412/lazykafka/releases
+
+#### Linux / macOS
+
+```
+# Download the binary (replace with your platform)
+# Make it executable
+chmod +x lazykafka-*
+# Move to a directory in your PATH
+sudo mv lazykafka-* /usr/local/bin/lazykafka
+```
+
+#### Windows
+Download the .exe file and add it to your PATH.
+
 ### From Source
 
 ```bash
