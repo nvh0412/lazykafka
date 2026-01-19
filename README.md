@@ -1,6 +1,8 @@
 # LazyKafka
 
-A fast, keyboard-driven terminal UI for Apache Kafka. Browse topics, view messages, manage consumer groups, and monitor your cluster — all without leaving the terminal.
+Dealing with Kafka topics and groups can be a real mission using just the standard scripts. I looked at the web tools available and thought, 'Yeah, nah—too much effort.'
+
+If you're like me and can't be bothered setting up a local web UI just to check a record, here is LazyKafka. It’s the terminal app that does the hard work so you don't have to.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Rust](https://img.shields.io/badge/rust-2024-orange.svg)
@@ -76,7 +78,7 @@ Keep an eye on your connection and cluster stats.
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/lazykafka
+git clone https://github.com/nvh0412/lazykafka
 cd lazykafka
 cargo build --release
 ```
