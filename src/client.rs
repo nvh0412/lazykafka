@@ -39,7 +39,7 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            client_id: "kafkatui-rs-client".to_string(),
+            client_id: "lazykafka-client".to_string(),
             request_timeout: Duration::from_secs(30),
             connection_timeout: Duration::from_secs(10),
             retry_count: 3,

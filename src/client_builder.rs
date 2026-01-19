@@ -129,7 +129,7 @@ mod tests {
     fn test_builder_default() {
         let builder = ClientBuilder::new();
         assert!(builder.brokers.is_empty());
-        assert_eq!(builder.config.client_id, "kafkatui-rs-client");
+        assert_eq!(builder.config.client_id, "lazykafka-client");
         assert_eq!(builder.config.retry_count, 3);
     }
 

@@ -2,7 +2,7 @@ use clap::Parser;
 use std::time::Duration;
 
 #[derive(Parser, Debug)]
-#[command(name = "kafkatui-rs")]
+#[command(name = "lazykafka")]
 #[command(version, about = "A terminal UI for Apache Kafka")]
 pub struct Args {
     /// Kafka broker address (can be specified multiple times)
@@ -11,7 +11,7 @@ pub struct Args {
     pub brokers: Vec<String>,
 
     /// Client ID for Kafka connections
-    #[arg(long, default_value = "kafkatui-rs-client")]
+    #[arg(long, default_value = "lazykafka-client")]
     pub client_id: String,
 
     /// Connection timeout in seconds

@@ -20,57 +20,57 @@ jobs:
           # Linux x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: kafkatui-rs
-            asset_name: kafkatui-rs-linux-x86_64
+            artifact_name: lazykafka
+            asset_name: lazykafka-linux-x86_64
             use_cross: false
 
           # Linux x86_64 (musl - static binary)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            artifact_name: kafkatui-rs
-            asset_name: kafkatui-rs-linux-x86_64-musl
+            artifact_name: lazykafka
+            asset_name: lazykafka-linux-x86_64-musl
             use_cross: true
 
           # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: kafkatui-rs
-            asset_name: kafkatui-rs-linux-arm64
+            artifact_name: lazykafka
+            asset_name: lazykafka-linux-arm64
             use_cross: true
 
           # Linux ARM64 (musl - static binary)
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            artifact_name: kafkatui-rs
-            asset_name: kafkatui-rs-linux-arm64-musl
+            artifact_name: lazykafka
+            asset_name: lazykafka-linux-arm64-musl
             use_cross: true
 
           # macOS x86_64 (Intel)
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: kafkatui-rs
-            asset_name: kafkatui-rs-macos-x86_64
+            artifact_name: lazykafka
+            asset_name: lazykafka-macos-x86_64
             use_cross: false
 
           # macOS ARM64 (Apple Silicon)
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: kafkatui-rs
-            asset_name: kafkatui-rs-macos-arm64
+            artifact_name: lazykafka
+            asset_name: lazykafka-macos-arm64
             use_cross: false
 
           # Windows x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: kafkatui-rs.exe
-            asset_name: kafkatui-rs-windows-x86_64.exe
+            artifact_name: lazykafka.exe
+            asset_name: lazykafka-windows-x86_64.exe
             use_cross: false
 
           # Windows ARM64
           - os: windows-latest
             target: aarch64-pc-windows-msvc
-            artifact_name: kafkatui-rs.exe
-            asset_name: kafkatui-rs-windows-arm64.exe
+            artifact_name: lazykafka.exe
+            asset_name: lazykafka-windows-arm64.exe
             use_cross: false
 
     steps:
@@ -181,9 +181,9 @@ jobs:
           \`\`\`bash
           # Download the binary (replace with your platform)
           # Make it executable
-          chmod +x kafkatui-rs-*
+          chmod +x lazykafka-*
           # Move to a directory in your PATH
-          sudo mv kafkatui-rs-* /usr/local/bin/kafkatui-rs
+          sudo mv lazykafka-* /usr/local/bin/lazykafka
           \`\`\`
 
           ### Windows
