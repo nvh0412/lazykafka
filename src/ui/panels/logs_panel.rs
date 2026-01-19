@@ -35,50 +35,8 @@ impl LogsPanel {
         // Store visible height for scroll calculations
         self.visible_height = area.height.saturating_sub(3) as usize; // Subtract header and borders
 
-        // Layout: Header (1 line) + Log entries
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1), // Header
-                Constraint::Min(0),    // Log entries
-            ])
-            .split(area);
-
-        // Render header
-        self.render_header(frame, chunks[0], app_state);
-
         // Render log entries
-        self.render_log_entries(frame, chunks[1], app_state);
-    }
-
-    fn render_header(&self, frame: &mut Frame, area: Rect, app_state: &AppState) {
-        let log_state = &app_state.protocol_log_state;
-
-        let filter_text = format!("Filter: {}", log_state.filter.display_name());
-        let pause_text = if log_state.is_paused { "[P]aused" } else { "[P]ause" };
-        let count_text = format!("{} logs", log_state.total_count());
-
-        let header_style = if self.is_focused {
-            Style::default().fg(Color::LightGreen)
-        } else {
-            Style::default().fg(Color::DarkGray)
-        };
-
-        let header = Line::from(vec![
-            Span::styled("Protocol Logs", header_style.add_modifier(Modifier::BOLD)),
-            Span::raw(" │ "),
-            Span::styled(filter_text, Style::default().fg(Color::Cyan)),
-            Span::raw(" │ "),
-            Span::styled(pause_text, if log_state.is_paused {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            }),
-            Span::raw(" │ [C]lear │ "),
-            Span::styled(count_text, Style::default().fg(Color::DarkGray)),
-        ]);
-
-        frame.render_widget(Paragraph::new(header), area);
+        self.render_log_entries(frame, area, app_state);
     }
 
     fn render_log_entries(&self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {

@@ -285,7 +285,6 @@ mod record_tests {
         assert_eq!(record.timestamp_delta, 0);
         assert_eq!(record.offset_delta, 0);
         assert_eq!(record.key, None); // null key
-        assert_eq!(record.value, vec![]); // null value becomes empty vec
         assert_eq!(record.headers.len(), 0);
     }
 

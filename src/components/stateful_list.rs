@@ -3,6 +3,7 @@ use ratatui::widgets::ListState;
 pub struct StatefulList<T> {
     pub items: Vec<T>,
     pub state: ListState,
+    pub selected_index: Option<usize>,
 }
 
 impl<T> StatefulList<T> {
@@ -10,6 +11,7 @@ impl<T> StatefulList<T> {
         Self {
             items,
             state: ListState::default(),
+            selected_index: None,
         }
     }
 
@@ -47,8 +49,17 @@ impl<T> StatefulList<T> {
     pub fn selected(&self) -> Option<&T> {
         self.state.selected().and_then(|i| self.items.get(i))
     }
+    
+    pub fn on_focused(&mut self) { 
+        self.state.select(self.selected_index.or(Some(0)));
+    }
+    
+    pub fn on_unfocused(&mut self) {
+        self.selected_index = self.state.selected();
+    }
 
     pub fn unselect(&mut self) {
+        self.selected_index = self.state.selected();
         self.state.select(None);
     }
 

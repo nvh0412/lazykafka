@@ -1,6 +1,8 @@
 use crate::models::broker_stats::ConnectionStatus;
 use crate::models::topic::Topic;
+use crate::repository::message_repository::RecordFetchOptions;
 use crate::state::app_state::{AppMessage, AppState, ConsumerGroupListState, TopicListState};
+use crate::state::records_state::RecordsLoadingState;
 use crate::ui::panels::{FocusTarget, GroupDetailPanel, LogsPanel, MainPanelType, PanelResult, RecordsPanel};
 use crate::ui::screen::{AppAction, EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
@@ -298,7 +300,7 @@ impl MainScreen {
             InputMode::SearchTopic => "<esc>: Cancel | <enter>: Confirm search",
             InputMode::PanelFocused => match &self.current_panel {
                 MainPanelType::Records => {
-                    "<esc>/<tab>: Back | q: Quit | l: Logs | j/k: Navigate | i: View detail"
+                    "<esc>: Back | j/k: Navigate | s: Sort | /: Search | f: Filter | n/p: Page | r: Refresh | i: Detail"
                 }
                 MainPanelType::GroupDetail(_) => {
                     "<esc>: Back | <tab>: Switch tab | l: Logs | r: Refresh | j/k: Navigate"
@@ -359,12 +361,12 @@ impl MainScreen {
             (InputMode::SelectGroup, InputMode::SelectTopic) => {
                 // Switching from Groups to Topics
                 app_state.filtered_consumer_groups_state.groups.unselect();
-                app_state.filtered_topic_state.topics.select_first();
+                app_state.filtered_topic_state.topics.on_focused();
             }
             (InputMode::PanelFocused, InputMode::SelectTopic) => {
                 // Returning to Topics from panel
                 app_state.filtered_consumer_groups_state.groups.unselect();
-                app_state.filtered_topic_state.topics.select_first();
+                app_state.filtered_topic_state.topics.on_focused();
             }
             (InputMode::PanelFocused, InputMode::SelectGroup) => {
                 // Returning to Groups from panel
@@ -424,19 +426,164 @@ impl MainScreen {
     }
 
     fn load_messages_for_topic(&self, topic: Topic, app_state: &mut AppState) {
+        // Set up the records state with the topic info
+        let partitions: Vec<i32> = topic.partitions.iter().map(|p| p.partition).collect();
+        app_state.records_state.set_topic(topic.name.clone(), partitions);
+
+        // Use paginated loading
+        self.load_records_paginated(topic, app_state, None);
+    }
+
+    fn load_records_paginated(
+        &self,
+        topic: Topic,
+        app_state: &mut AppState,
+        options: Option<RecordFetchOptions>,
+    ) {
         let tx = app_state.tx.clone();
         let repo = app_state.repository_manager.messages().clone();
 
+        let fetch_options = options.unwrap_or_else(|| RecordFetchOptions {
+            page_size: app_state.records_state.pagination.page_size,
+            start_offsets: None,
+            partition_filter: if app_state.records_state.filter.has_partition_filter() {
+                Some(
+                    app_state
+                        .records_state
+                        .filter
+                        .selected_partitions
+                        .iter()
+                        .copied()
+                        .collect(),
+                )
+            } else {
+                None
+            },
+            newest_first: matches!(
+                app_state.records_state.sort_mode,
+                crate::state::records_state::RecordSortMode::NewestFirst
+            ),
+        });
+
+        // Mark as loading
+        app_state.records_state.loading_state = RecordsLoadingState::Loading;
+
         tokio::spawn(async move {
-            match repo.fetch_by_topic(topic).await {
-                Ok(records) => {
-                    let _ = tx.send(AppMessage::MessagesLoaded(records));
+            match repo.fetch_by_topic_paginated(topic, fetch_options).await {
+                Ok(result) => {
+                    let _ = tx.send(AppMessage::RecordsPageLoaded(result));
                 }
                 Err(e) => {
-                    let _ = tx.send(AppMessage::Error(e.to_string()));
+                    let _ = tx.send(AppMessage::RecordsLoadingError(e.to_string()));
                 }
             }
         });
+    }
+
+    fn load_next_page(&self, app_state: &mut AppState) {
+        if !app_state.records_state.pagination.has_more {
+            return;
+        }
+
+        if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
+            let options = RecordFetchOptions {
+                page_size: app_state.records_state.pagination.page_size,
+                start_offsets: Some(app_state.records_state.pagination.end_offsets.clone()),
+                partition_filter: if app_state.records_state.filter.has_partition_filter() {
+                    Some(
+                        app_state
+                            .records_state
+                            .filter
+                            .selected_partitions
+                            .iter()
+                            .copied()
+                            .collect(),
+                    )
+                } else {
+                    None
+                },
+                newest_first: false, // When paging forward, we fetch from older to newer
+            };
+
+            app_state.records_state.pagination.current_page += 1;
+            self.load_records_paginated(topic.clone(), app_state, Some(options));
+        }
+    }
+
+    fn load_previous_page(&self, app_state: &mut AppState) {
+        if !app_state.records_state.pagination.has_previous {
+            return;
+        }
+
+        if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
+            // Calculate offsets for previous page
+            let page_size = app_state.records_state.pagination.page_size as i64;
+            let mut prev_offsets = std::collections::HashMap::new();
+
+            for (&partition, &start_offset) in &app_state.records_state.pagination.start_offsets {
+                let earliest = app_state
+                    .records_state
+                    .pagination
+                    .earliest_offsets
+                    .get(&partition)
+                    .copied()
+                    .unwrap_or(0);
+                let new_start = (start_offset - page_size).max(earliest);
+                prev_offsets.insert(partition, new_start);
+            }
+
+            let options = RecordFetchOptions {
+                page_size: app_state.records_state.pagination.page_size,
+                start_offsets: Some(prev_offsets),
+                partition_filter: if app_state.records_state.filter.has_partition_filter() {
+                    Some(
+                        app_state
+                            .records_state
+                            .filter
+                            .selected_partitions
+                            .iter()
+                            .copied()
+                            .collect(),
+                    )
+                } else {
+                    None
+                },
+                newest_first: true,
+            };
+
+            app_state.records_state.pagination.current_page =
+                app_state.records_state.pagination.current_page.saturating_sub(1).max(1);
+            self.load_records_paginated(topic.clone(), app_state, Some(options));
+        }
+    }
+
+    fn refresh_records(&self, app_state: &mut AppState) {
+        if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
+            // Reload current page
+            let options = RecordFetchOptions {
+                page_size: app_state.records_state.pagination.page_size,
+                start_offsets: Some(app_state.records_state.pagination.start_offsets.clone()),
+                partition_filter: if app_state.records_state.filter.has_partition_filter() {
+                    Some(
+                        app_state
+                            .records_state
+                            .filter
+                            .selected_partitions
+                            .iter()
+                            .copied()
+                            .collect(),
+                    )
+                } else {
+                    None
+                },
+                newest_first: matches!(
+                    app_state.records_state.sort_mode,
+                    crate::state::records_state::RecordSortMode::NewestFirst
+                ),
+            };
+
+            self.load_records_paginated(topic.clone(), app_state, Some(options));
+        }
     }
 
     fn load_consumer_groups(&self, app_state: &mut AppState) {
@@ -565,6 +712,7 @@ impl Screen for MainScreen {
                     if let Some(topic) = app_state.filtered_topic_state.topics.selected() {
                         self.load_messages_for_topic(topic.clone(), app_state);
                     }
+                    app_state.filtered_topic_state.topics.on_unfocused();
                     self.switch_panel(MainPanelType::Records);
                     EventResult::Handled
                 }
@@ -606,9 +754,31 @@ impl Screen for MainScreen {
                     return EventResult::Handled;
                 }
 
+                // Handle records panel specific keys that need main_screen access
+                if matches!(self.current_panel, MainPanelType::Records) {
+                    match key {
+                        KeyCode::Char('n') => {
+                            self.load_next_page(app_state);
+                            return EventResult::Handled;
+                        }
+                        KeyCode::Char('p') if !self.records_panel.is_searching() => {
+                            self.load_previous_page(app_state);
+                            return EventResult::Handled;
+                        }
+                        KeyCode::Char('r') => {
+                            self.refresh_records(app_state);
+                            return EventResult::Handled;
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Dispatch to current panel
                 let result = match &self.current_panel {
-                    MainPanelType::Records => self.records_panel.handle_key(key, app_state),
+                    MainPanelType::Records => {
+                        app_state.filtered_topic_state.topics.on_focused();
+                        self.records_panel.handle_key(key, app_state)
+                    },
                     MainPanelType::GroupDetail(_) => {
                         if let Some(panel) = &mut self.group_detail_panel {
                             panel.handle_key(key, app_state)

@@ -6,9 +6,11 @@ use crate::models::consumer_group::{ConsumerGroupDetail, ConsumerGroupSummary};
 use crate::models::protocol_log::ProtocolLogMessage;
 use crate::models::topic::{Topic, TopicConfig};
 use crate::protocol::record::Record;
+use crate::repository::message_repository::RecordFetchResult;
 use crate::repository::RepositoryManager;
 use crate::state::filter::FilterState;
 use crate::state::protocol_log_state::ProtocolLogState;
+use crate::state::records_state::RecordsState;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
@@ -85,6 +87,10 @@ pub enum AppMessage {
     CreatePartitionsError(String),
     // Protocol log messages
     ProtocolLog(ProtocolLogMessage),
+    // Records panel messages (new paginated loading)
+    RecordsLoadingStarted { topic_name: String },
+    RecordsPageLoaded(RecordFetchResult),
+    RecordsLoadingError(String),
 }
 
 #[allow(dead_code)]
@@ -93,7 +99,8 @@ pub struct AppState {
     pub filtered_topic_state: TopicListState,
     pub topic_info_state: TopicInfoState,
     pub records: StatefulList<Record>,
-    // pub messages: StatefulList<Message>,
+    // New records state with pagination, sorting, filtering
+    pub records_state: RecordsState,
     pub filter: FilterState,
     pub broker_stats: BrokerStats,
     pub breadcrumb: Vec<String>,
@@ -128,6 +135,7 @@ impl AppState {
                 scroll_state: ScrollbarState::default(),
             },
             records: StatefulList::with_items(vec![]),
+            records_state: RecordsState::new(),
             filter: Default::default(),
             breadcrumb: Default::default(),
             broker_stats: BrokerStats {

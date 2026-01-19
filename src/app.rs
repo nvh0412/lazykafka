@@ -185,6 +185,17 @@ impl App {
                 AppMessage::ConsumerGroupError(_) => {
                     // Consumer group error - could display to user
                 }
+                AppMessage::RecordsLoadingStarted { topic_name: _ } => {
+                    // Records loading has started - state is already set by main_screen
+                }
+                AppMessage::RecordsPageLoaded(result) => {
+                    // Update records state with the loaded page
+                    self.state.records_state.update_from_result(result);
+                }
+                AppMessage::RecordsLoadingError(error) => {
+                    // Set error state in records
+                    self.state.records_state.set_error(error);
+                }
             }
         }
 
