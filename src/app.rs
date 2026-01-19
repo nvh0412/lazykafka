@@ -67,9 +67,7 @@ impl App {
                 self.screen_manager.pop(&mut self.state);
                 true
             }
-            EventResult::Quit => {
-                false
-            },
+            EventResult::Quit => false,
             _ => true,
         }
     }

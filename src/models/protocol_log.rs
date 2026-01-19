@@ -47,7 +47,7 @@ impl ApiType {
     /// Create ApiType from Kafka API key
     pub fn from_api_key(api_key: i16) -> Self {
         match api_key {
-            0 => ApiType::Fetch,                // Produce is 0, but we only do Fetch
+            0 => ApiType::Fetch, // Produce is 0, but we only do Fetch
             1 => ApiType::Fetch,
             2 => ApiType::ListOffset,
             3 => ApiType::Metadata,
@@ -105,12 +105,7 @@ pub struct ProtocolLogEntry {
 
 impl ProtocolLogEntry {
     /// Create a new request log entry
-    pub fn new_request(
-        api_type: ApiType,
-        api_version: i16,
-        bytes: usize,
-        summary: String,
-    ) -> Self {
+    pub fn new_request(api_type: ApiType, api_version: i16, bytes: usize, summary: String) -> Self {
         Self {
             timestamp: SystemTime::now(),
             direction: LogDirection::Request,
@@ -179,11 +174,16 @@ impl ProtocolLogFilter {
     pub fn matches(&self, entry: &ProtocolLogEntry) -> bool {
         match self {
             ProtocolLogFilter::All => true,
-            ProtocolLogFilter::Fetch => matches!(entry.api_type, ApiType::Fetch | ApiType::ListOffset),
+            ProtocolLogFilter::Fetch => {
+                matches!(entry.api_type, ApiType::Fetch | ApiType::ListOffset)
+            }
             ProtocolLogFilter::Metadata => matches!(entry.api_type, ApiType::Metadata),
             ProtocolLogFilter::Groups => matches!(
                 entry.api_type,
-                ApiType::ListGroups | ApiType::DescribeGroups | ApiType::FindCoordinator | ApiType::OffsetFetch
+                ApiType::ListGroups
+                    | ApiType::DescribeGroups
+                    | ApiType::FindCoordinator
+                    | ApiType::OffsetFetch
             ),
             ProtocolLogFilter::Errors => matches!(entry.status, LogStatus::Error),
         }

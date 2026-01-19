@@ -84,10 +84,7 @@ impl RecordDetailModal {
     }
 
     fn highlight_json(json_str: &str) -> Vec<Line<'static>> {
-        json_str
-            .lines()
-            .map(Self::highlight_json_line)
-            .collect()
+        json_str.lines().map(Self::highlight_json_line).collect()
     }
 
     fn highlight_json_line(line: &str) -> Line<'static> {

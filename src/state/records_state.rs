@@ -1,5 +1,5 @@
 use crate::protocol::record::Record;
-use crate::repository::message_repository::{RecordFetchResult, DEFAULT_PAGE_SIZE};
+use crate::repository::message_repository::{DEFAULT_PAGE_SIZE, RecordFetchResult};
 use std::collections::{HashMap, HashSet};
 
 /// How records are sorted in the display

@@ -5,14 +5,14 @@ use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 use crate::models::consumer_group::{ConsumerGroupDetail, ConsumerGroupSummary};
 use crate::models::topic::{Topic, TopicConfig};
 use crate::protocol::record::Record;
-use crate::repository::message_repository::RecordFetchResult;
 use crate::repository::RepositoryManager;
+use crate::repository::message_repository::RecordFetchResult;
 use crate::state::filter::FilterState;
 use crate::state::protocol_log_state::ProtocolLogState;
 use crate::state::records_state::RecordsState;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 
 pub struct TopicListState {
     pub topics: StatefulList<Topic>,

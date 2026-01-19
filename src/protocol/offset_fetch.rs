@@ -21,7 +21,11 @@ pub struct OffsetFetchTopic {
 }
 
 impl OffsetFetchRequest {
-    pub fn new(correlation_id: i32, group_id: String, topics: Option<Vec<OffsetFetchTopic>>) -> Self {
+    pub fn new(
+        correlation_id: i32,
+        group_id: String,
+        topics: Option<Vec<OffsetFetchTopic>>,
+    ) -> Self {
         Self {
             correlation_id,
             group_id,

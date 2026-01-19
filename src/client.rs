@@ -332,8 +332,12 @@ impl KafkaClient {
         timeout_ms: i32,
     ) -> Result<CreatePartitionsResponse> {
         let correlation_id = self.connection.next_correlation_id();
-        let request =
-            CreatePartitionsRequest::new(correlation_id, topic_name, new_partition_count, timeout_ms);
+        let request = CreatePartitionsRequest::new(
+            correlation_id,
+            topic_name,
+            new_partition_count,
+            timeout_ms,
+        );
 
         self.connection.send_request(&request.encode()).await?;
 
@@ -478,7 +482,10 @@ impl KafkaClient {
         group_id: String,
         topics: Option<Vec<OffsetFetchTopic>>,
     ) -> Result<OffsetFetchResponse> {
-        match self.fetch_offsets_internal(group_id.clone(), topics.clone()).await {
+        match self
+            .fetch_offsets_internal(group_id.clone(), topics.clone())
+            .await
+        {
             Ok(response) => Ok(response),
             Err(e) if Self::is_connection_error(&e) => {
                 self.reconnect().await?;

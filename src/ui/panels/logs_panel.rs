@@ -1,8 +1,8 @@
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Rect;
 use ratatui::prelude::{Color, Line, Span, Style};
 use ratatui::widgets::{Block, Borders, List, ListItem};
-use ratatui::Frame;
 
 use crate::models::protocol_log::{ApiType, LogDirection, LogStatus, ProtocolLogEntry};
 use crate::state::app_state::AppState;

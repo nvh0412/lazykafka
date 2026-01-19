@@ -6,7 +6,4 @@ pub enum MainPanelType {
     Records,
     /// Consumer group details (inline panel)
     GroupDetail(String),
-    // Future panel types:
-    // BrokerDetail(i32),
 }
-

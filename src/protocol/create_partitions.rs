@@ -16,8 +16,8 @@ pub struct CreatePartitionsRequest {
 
 pub struct CreatePartitionsTopic {
     pub topic: String,
-    pub count: i32,                          // New TOTAL partition count
-    pub assignments: Option<Vec<Vec<i32>>>,  // Optional broker assignments for new partitions
+    pub count: i32,                         // New TOTAL partition count
+    pub assignments: Option<Vec<Vec<i32>>>, // Optional broker assignments for new partitions
 }
 
 impl CreatePartitionsRequest {
@@ -114,7 +114,9 @@ impl CreatePartitionsResult {
 
         let desc = match self.error_code {
             37 => "INVALID_PARTITIONS: New partition count must be greater than current count",
-            39 => "INVALID_REPLICA_ASSIGNMENT: Assignment list size doesn't match replication factor",
+            39 => {
+                "INVALID_REPLICA_ASSIGNMENT: Assignment list size doesn't match replication factor"
+            }
             42 => "INVALID_REQUEST: Invalid request format or duplicate topics",
             _ => "Unknown error",
         };
@@ -183,12 +185,12 @@ mod tests {
     fn test_decode_response_success() {
         // Simulate a successful response
         let mut buf = MessageBuffer::new();
-        buf.put_i32(1);      // correlation_id
-        buf.put_i32(0);      // throttle_time_ms
-        buf.put_i32(1);      // results count
+        buf.put_i32(1); // correlation_id
+        buf.put_i32(0); // throttle_time_ms
+        buf.put_i32(1); // results count
         buf.put_string("test-topic");
-        buf.put_i16(0);      // error_code = success
-        buf.put_i16(-1);     // error_message = null (nullable string with -1)
+        buf.put_i16(0); // error_code = success
+        buf.put_i16(-1); // error_message = null (nullable string with -1)
 
         let data = buf.into_bytes();
         let response = CreatePartitionsResponse::decode(&data).unwrap();
@@ -202,11 +204,11 @@ mod tests {
     #[test]
     fn test_decode_response_error() {
         let mut buf = MessageBuffer::new();
-        buf.put_i32(1);      // correlation_id
-        buf.put_i32(0);      // throttle_time_ms
-        buf.put_i32(1);      // results count
+        buf.put_i32(1); // correlation_id
+        buf.put_i32(0); // throttle_time_ms
+        buf.put_i32(1); // results count
         buf.put_string("test-topic");
-        buf.put_i16(37);     // error_code = INVALID_PARTITIONS
+        buf.put_i16(37); // error_code = INVALID_PARTITIONS
         buf.put_string("Partition count must increase"); // error_message
 
         let data = buf.into_bytes();
@@ -214,6 +216,11 @@ mod tests {
 
         assert!(!response.results[0].is_success());
         assert!(response.first_error().is_some());
-        assert!(response.results[0].error_description().unwrap().contains("INVALID_PARTITIONS"));
+        assert!(
+            response.results[0]
+                .error_description()
+                .unwrap()
+                .contains("INVALID_PARTITIONS")
+        );
     }
 }

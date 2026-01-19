@@ -171,18 +171,4 @@ mod tests {
 
         assert!(result.is_err());
     }
-
-    #[tokio::test]
-    async fn test_build_with_fallback() {
-        // First broker invalid, second might work
-        let builder = ClientBuilder::new()
-            .broker("invalid.broker:9092")
-            .broker("localhost:9092")
-            .connection_timeout(Duration::from_millis(500));
-
-        // Will fail on invalid broker, try localhost
-        let result = builder.build().await;
-        // Result depends on whether Kafka is running
-        assert!(result.is_ok());
-    }
 }

@@ -1,11 +1,11 @@
 use crate::models::consumer_group::ConsumerGroupDetail;
 use crate::state::app_state::{AppMessage, AppState, ConsumerGroupTab};
 use crate::ui::panels::{FocusTarget, PanelResult};
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Tabs};
-use ratatui::Frame;
 
 pub struct GroupDetailPanel {
     group_id: String,

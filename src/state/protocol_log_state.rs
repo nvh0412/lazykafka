@@ -59,12 +59,7 @@ impl ProtocolLogState {
             (SystemTime::now(), api_type, api_version, broker.clone()),
         );
 
-        let entry = ProtocolLogEntry::new_request(
-            api_type,
-            api_version,
-            bytes,
-            summary,
-        );
+        let entry = ProtocolLogEntry::new_request(api_type, api_version, bytes, summary);
 
         self.add_entry(entry);
     }
@@ -81,7 +76,9 @@ impl ProtocolLogState {
         self.next_id += 1;
 
         // Look up the pending request
-        if let Some((request_time, api_type, api_version, _broker)) = self.pending_requests.remove(&correlation_id) {
+        if let Some((request_time, api_type, api_version, _broker)) =
+            self.pending_requests.remove(&correlation_id)
+        {
             let duration = request_time.elapsed().unwrap_or_default();
 
             let entry = ProtocolLogEntry::new_response(
@@ -122,7 +119,10 @@ impl ProtocolLogState {
 
     /// Get the number of filtered entries
     pub fn filtered_count(&self) -> usize {
-        self.entries.iter().filter(|e| self.filter.matches(e)).count()
+        self.entries
+            .iter()
+            .filter(|e| self.filter.matches(e))
+            .count()
     }
 
     /// Clear all log entries

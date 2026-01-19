@@ -10,8 +10,8 @@ use crate::{
 /// Finds the coordinator broker for a consumer group
 pub struct FindCoordinatorRequest {
     pub correlation_id: i32,
-    pub key: String,      // The group_id to find coordinator for
-    pub key_type: i8,     // 0 = group, 1 = transaction
+    pub key: String,  // The group_id to find coordinator for
+    pub key_type: i8, // 0 = group, 1 = transaction
 }
 
 impl FindCoordinatorRequest {

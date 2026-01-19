@@ -2,9 +2,7 @@ use crate::client::KafkaClient;
 use crate::error;
 use crate::models::topic::Topic;
 use crate::protocol::fetch::{FetchPartition, FetchTopic};
-use crate::protocol::list_offset::{
-    ListOffsetPartition, ListOffsetTopic,
-};
+use crate::protocol::list_offset::{ListOffsetPartition, ListOffsetTopic};
 use crate::protocol::record::Record;
 use std::collections::HashMap;
 use std::sync::Arc;
