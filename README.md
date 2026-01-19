@@ -7,9 +7,13 @@ A fast, keyboard-driven terminal UI for Apache Kafka. Browse topics, view messag
 
 ## Features
 
+<img width="1624" height="1060" alt="Demo" src="https://github.com/user-attachments/assets/e4a64377-e867-4cb6-ac36-668eb7bc734b" />
+
 ### Topic Management
 
 Browse, search, and manage Kafka topics with ease.
+
+![topic-management](https://github.com/user-attachments/assets/15cf1a31-6f31-4e43-a1cf-7cd2a655650c)
 
 <!-- Demo GIF here -->
 
@@ -23,7 +27,7 @@ Browse, search, and manage Kafka topics with ease.
 
 Explore records with powerful filtering and pagination.
 
-<!-- Demo GIF here -->
+![message-management](https://github.com/user-attachments/assets/6fefd519-b874-4e4b-8761-67d4a05e0e68)
 
 - Paginated loading (configurable page size)
 - Multiple sort modes: Newest First, Oldest First, Offset Asc/Desc
@@ -34,6 +38,8 @@ Explore records with powerful filtering and pagination.
 ### Consumer Group Management
 
 Monitor consumer groups and their state.
+
+![consumer_group](https://github.com/user-attachments/assets/6ab97e6c-e793-46a3-97c9-4cb8a76152fa)
 
 <!-- Demo GIF here -->
 
@@ -47,6 +53,7 @@ Monitor consumer groups and their state.
 Debug Kafka interactions with built-in protocol logging.
 
 <!-- Demo GIF here -->
+<img width="774" height="155" alt="Screenshot 2026-01-19 at 11 29 18 pm" src="https://github.com/user-attachments/assets/df1a433b-af62-4880-b8b0-015f9f6f3bbf" />
 
 - Live logging of API requests/responses
 - Correlation ID tracking
@@ -58,6 +65,7 @@ Debug Kafka interactions with built-in protocol logging.
 Keep an eye on your connection and cluster stats.
 
 <!-- Demo GIF here -->
+<img width="273" height="51" alt="Screenshot 2026-01-19 at 11 32 21 pm" src="https://github.com/user-attachments/assets/10f4877b-0c06-409d-9566-d61272274fc3" />
 
 - Real-time connection status
 - Bytes sent/received statistics
