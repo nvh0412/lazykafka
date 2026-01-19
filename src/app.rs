@@ -3,9 +3,8 @@ use tokio::sync::{RwLock, mpsc};
 
 use crate::models::protocol_log::ProtocolLogMessage;
 use crate::state::app_state::{AppMessage, AppState};
-use crate::ui::screen::{AppAction, ConfirmAction, EventResult};
+use crate::ui::screen::{AppAction, EventResult};
 use crate::ui::screen_manager::ScreenManager;
-use crate::ui::screen_type::ScreenType;
 use crate::{client::KafkaClient, components::stateful_list::StatefulList};
 
 pub struct App {
@@ -45,16 +44,6 @@ impl App {
                     self.close_popup();
                     true
                 }
-                AppAction::ConfirmExitApp => {
-                    self.screen_manager.push(
-                        ScreenType::ConfirmDialog {
-                            title: "Leave app?".to_string(),
-                            message: "Are you sure you want to exit?".to_string(),
-                        },
-                        &mut self.state,
-                    );
-                    true
-                }
                 AppAction::DeletedTopic(_t) => {
                     self.screen_manager.pop(&mut self.state);
                     true
@@ -78,12 +67,8 @@ impl App {
                 self.screen_manager.pop(&mut self.state);
                 true
             }
-            EventResult::Quit(confirm_action) => match confirm_action {
-                ConfirmAction::Accept => false,
-                ConfirmAction::Decline => {
-                    self.screen_manager.pop(&mut self.state);
-                    true
-                }
+            EventResult::Quit => {
+                false
             },
             _ => true,
         }
@@ -111,9 +96,6 @@ impl App {
                 AppMessage::Error(_err) => {
                     // self.state.error = Some(err);
                 }
-                AppMessage::MessagesLoaded(records) => {
-                    self.state.records = StatefulList::with_items(records);
-                }
                 AppMessage::TopicConfigLoaded(topic_name, config) => {
                     if let Some(topic) = self
                         .state
@@ -139,7 +121,7 @@ impl App {
                 AppMessage::ConsumerGroupDetailLoaded(detail) => {
                     self.state.consumer_group_detail_state.detail = Some(detail);
                 }
-                AppMessage::PartitionsCreated { topic: _, new_count: _ } => {
+                AppMessage::PartitionsCreated => {
                     // Partitions were successfully created
                     // The topic list will be refreshed when the user navigates or presses refresh
                     // For now, we just acknowledge the success
@@ -147,46 +129,8 @@ impl App {
                 AppMessage::CreatePartitionsError(_err) => {
                     // Could display error to user here in the future
                 }
-                AppMessage::ProtocolLog(log_msg) => {
-                    // Handle protocol log messages
-                    match log_msg {
-                        ProtocolLogMessage::Request {
-                            api_type,
-                            api_version,
-                            correlation_id,
-                            broker,
-                            bytes,
-                            summary,
-                        } => {
-                            self.state.protocol_log_state.add_request(
-                                api_type,
-                                api_version,
-                                correlation_id,
-                                broker,
-                                bytes,
-                                summary,
-                            );
-                        }
-                        ProtocolLogMessage::Response {
-                            correlation_id,
-                            bytes,
-                            error_code,
-                            summary,
-                        } => {
-                            self.state.protocol_log_state.add_response(
-                                correlation_id,
-                                bytes,
-                                error_code,
-                                summary,
-                            );
-                        }
-                    }
-                }
-                AppMessage::ConsumerGroupError(_) => {
+                AppMessage::ConsumerGroupError => {
                     // Consumer group error - could display to user
-                }
-                AppMessage::RecordsLoadingStarted { topic_name: _ } => {
-                    // Records loading has started - state is already set by main_screen
                 }
                 AppMessage::RecordsPageLoaded(result) => {
                     // Update records state with the loaded page

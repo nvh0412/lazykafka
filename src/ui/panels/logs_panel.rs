@@ -1,10 +1,10 @@
 use ratatui::crossterm::event::KeyCode;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::prelude::{Color, Line, Modifier, Span, Style, Stylize};
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use ratatui::layout::Rect;
+use ratatui::prelude::{Color, Line, Span, Style};
+use ratatui::widgets::{Block, Borders, List, ListItem};
 use ratatui::Frame;
 
-use crate::models::protocol_log::{ApiType, LogDirection, LogStatus, ProtocolLogEntry, ProtocolLogFilter};
+use crate::models::protocol_log::{ApiType, LogDirection, LogStatus, ProtocolLogEntry};
 use crate::state::app_state::AppState;
 
 use super::PanelResult;
@@ -25,12 +25,6 @@ impl LogsPanel {
         }
     }
 
-    /// Toggle focus state
-    pub fn toggle_focus(&mut self) {
-        self.is_focused = !self.is_focused;
-    }
-
-    /// Render the logs panel
     pub fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
         // Store visible height for scroll calculations
         self.visible_height = area.height.saturating_sub(3) as usize; // Subtract header and borders
@@ -50,7 +44,9 @@ impl LogsPanel {
             // Auto-scroll to bottom
             total_entries.saturating_sub(visible_height)
         } else {
-            log_state.scroll_offset.min(total_entries.saturating_sub(visible_height))
+            log_state
+                .scroll_offset
+                .min(total_entries.saturating_sub(visible_height))
         };
 
         // Get visible entries
@@ -67,12 +63,11 @@ impl LogsPanel {
             Style::default().fg(Color::DarkGray)
         };
 
-        let list = List::new(visible_entries)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(border_style),
-            );
+        let list = List::new(visible_entries).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style),
+        );
 
         frame.render_widget(list, area);
     }
@@ -106,9 +101,10 @@ impl LogsPanel {
         let api_style = match entry.api_type {
             ApiType::Fetch | ApiType::ListOffset => Style::default().fg(Color::Cyan),
             ApiType::Metadata => Style::default().fg(Color::Yellow),
-            ApiType::ListGroups | ApiType::DescribeGroups | ApiType::FindCoordinator | ApiType::OffsetFetch => {
-                Style::default().fg(Color::Magenta)
-            }
+            ApiType::ListGroups
+            | ApiType::DescribeGroups
+            | ApiType::FindCoordinator
+            | ApiType::OffsetFetch => Style::default().fg(Color::Magenta),
             ApiType::DeleteTopics | ApiType::CreatePartitions => Style::default().fg(Color::Red),
             _ => Style::default().fg(Color::White),
         };
@@ -135,17 +131,26 @@ impl LogsPanel {
         let bytes_str = format_bytes(entry.bytes);
 
         let line = Line::from(vec![
-            Span::styled(format!("{:>7}", time_str), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{:>7}", time_str),
+                Style::default().fg(Color::DarkGray),
+            ),
             Span::raw("  "),
             Span::styled(direction_str, direction_style),
             Span::raw("  "),
             Span::styled(format!("{:<12}", entry.api_type.display_name()), api_style),
             Span::raw(" "),
-            Span::styled(format!("v{}", entry.api_version), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("v{}", entry.api_version),
+                Style::default().fg(Color::DarkGray),
+            ),
             Span::raw("  "),
             Span::styled(format!("{:>6}", status_str), status_style),
             Span::raw("  "),
-            Span::styled(format!("{:>8}", bytes_str), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{:>8}", bytes_str),
+                Style::default().fg(Color::DarkGray),
+            ),
             Span::raw("  "),
             Span::styled(entry.summary.clone(), Style::default().fg(Color::White)),
         ]);

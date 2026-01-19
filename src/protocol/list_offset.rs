@@ -74,7 +74,6 @@ pub struct ListOffsetResponse {
 }
 
 pub struct ListOffsetTopicResponse {
-    pub name: String,
     pub partitions: Vec<ListOffsetPartitionResponse>,
 }
 
@@ -95,7 +94,7 @@ impl ProtocolResponse<ListOffsetResponse> for ListOffsetResponse {
         let mut topics = Vec::with_capacity(topic_count as usize);
 
         for _ in 0..topic_count {
-            let name = decoder.read_string()?;
+            let _name = decoder.read_string()?;
 
             let partition_count = decoder.read_i32()?;
             let mut partitions = Vec::with_capacity(partition_count as usize);
@@ -109,7 +108,7 @@ impl ProtocolResponse<ListOffsetResponse> for ListOffsetResponse {
                 })
             }
 
-            topics.push(ListOffsetTopicResponse { name, partitions });
+            topics.push(ListOffsetTopicResponse { partitions });
         }
 
         Ok(ListOffsetResponse {

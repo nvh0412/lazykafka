@@ -28,11 +28,6 @@ impl OffsetFetchRequest {
             topics,
         }
     }
-
-    /// Create a request to fetch all topic offsets for a group
-    pub fn all_topics(correlation_id: i32, group_id: String) -> Self {
-        Self::new(correlation_id, group_id, None)
-    }
 }
 
 impl ProtocolRequest for OffsetFetchRequest {
@@ -79,9 +74,7 @@ impl ProtocolRequest for OffsetFetchRequest {
 /// OffsetFetch Response
 pub struct OffsetFetchResponse {
     pub correlation_id: i32,
-    pub throttle_time_ms: i32,
     pub topics: Vec<OffsetFetchTopicResponse>,
-    pub error_code: i16,
 }
 
 #[derive(Debug, Clone)]
@@ -104,7 +97,7 @@ impl ProtocolResponse<OffsetFetchResponse> for OffsetFetchResponse {
         let mut decoder = MessageDecoder::new(data);
 
         let correlation_id = decoder.read_i32()?;
-        let throttle_time_ms = decoder.read_i32()?;
+        let _throttle_time_ms = decoder.read_i32()?;
 
         let topic_count = decoder.read_i32()? as usize;
         let mut topics = Vec::with_capacity(topic_count);
@@ -127,13 +120,11 @@ impl ProtocolResponse<OffsetFetchResponse> for OffsetFetchResponse {
             topics.push(OffsetFetchTopicResponse { name, partitions });
         }
 
-        let error_code = decoder.read_i16()?;
+        let _error_code = decoder.read_i16()?;
 
         Ok(Self {
             correlation_id,
-            throttle_time_ms,
             topics,
-            error_code,
         })
     }
 }

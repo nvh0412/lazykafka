@@ -43,7 +43,6 @@ impl ProtocolRequest for ListGroupsRequest {
 /// ListGroups Response
 pub struct ListGroupsResponse {
     pub correlation_id: i32,
-    pub throttle_time_ms: i32,
     pub error_code: i16,
     pub groups: Vec<GroupListing>,
 }
@@ -52,7 +51,6 @@ pub struct ListGroupsResponse {
 #[derive(Debug, Clone)]
 pub struct GroupListing {
     pub group_id: String,
-    pub protocol_type: String,
 }
 
 impl ProtocolResponse<ListGroupsResponse> for ListGroupsResponse {
@@ -60,7 +58,7 @@ impl ProtocolResponse<ListGroupsResponse> for ListGroupsResponse {
         let mut decoder = MessageDecoder::new(data);
 
         let correlation_id = decoder.read_i32()?;
-        let throttle_time_ms = decoder.read_i32()?;
+        let _throttle_time_ms = decoder.read_i32()?;
         let error_code = decoder.read_i16()?;
 
         let group_count = decoder.read_i32()? as usize;
@@ -69,13 +67,11 @@ impl ProtocolResponse<ListGroupsResponse> for ListGroupsResponse {
         for _ in 0..group_count {
             groups.push(GroupListing {
                 group_id: decoder.read_string()?,
-                protocol_type: decoder.read_string()?,
             });
         }
 
         Ok(Self {
             correlation_id,
-            throttle_time_ms,
             error_code,
             groups,
         })

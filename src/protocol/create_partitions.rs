@@ -92,12 +92,10 @@ impl CreatePartitionsRequest {
 /// Response from CreatePartitions request
 pub struct CreatePartitionsResponse {
     pub correlation_id: i32,
-    pub throttle_time_ms: i32,
     pub results: Vec<CreatePartitionsResult>,
 }
 
 pub struct CreatePartitionsResult {
-    pub topic: String,
     pub error_code: i16,
     pub error_message: Option<String>,
 }
@@ -135,19 +133,18 @@ impl CreatePartitionsResponse {
         let mut decoder = MessageDecoder::new(data);
 
         let correlation_id = decoder.read_i32()?;
-        let throttle_time_ms = decoder.read_i32()?;
+        let _throttle_time_ms = decoder.read_i32()?;
 
         // Read results array
         let result_count = decoder.read_i32()? as usize;
         let mut results = Vec::with_capacity(result_count);
 
         for _ in 0..result_count {
-            let topic = decoder.read_string()?;
+            let _topic = decoder.read_string()?;
             let error_code = decoder.read_i16()?;
             let error_message = decoder.read_nullable_string()?;
 
             results.push(CreatePartitionsResult {
-                topic,
                 error_code,
                 error_message,
             });
@@ -155,7 +152,6 @@ impl CreatePartitionsResponse {
 
         Ok(Self {
             correlation_id,
-            throttle_time_ms,
             results,
         })
     }

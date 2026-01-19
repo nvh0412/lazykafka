@@ -2,12 +2,14 @@ use crate::protocol::record::Record;
 use crate::state::app_state::AppState;
 use crate::ui::screen::AppAction::ClosePopup;
 use crate::ui::screen::{EventResult, Screen};
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
-use ratatui::Frame;
+use ratatui::widgets::{
+    Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+};
 
 pub struct RecordDetailModal {
     record: Record,
@@ -52,7 +54,13 @@ impl RecordDetailModal {
             let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
             let ascii: String = chunk
                 .iter()
-                .map(|&b| if (32..127).contains(&b) { b as char } else { '.' })
+                .map(|&b| {
+                    if (32..127).contains(&b) {
+                        b as char
+                    } else {
+                        '.'
+                    }
+                })
                 .collect();
             lines.push(Line::from(vec![
                 Span::styled(hex.join(" "), Style::default().fg(Color::Yellow)),
@@ -76,7 +84,10 @@ impl RecordDetailModal {
     }
 
     fn highlight_json(json_str: &str) -> Vec<Line<'static>> {
-        json_str.lines().map(|line| Self::highlight_json_line(line)).collect()
+        json_str
+            .lines()
+            .map(Self::highlight_json_line)
+            .collect()
     }
 
     fn highlight_json_line(line: &str) -> Line<'static> {
@@ -123,7 +134,9 @@ impl RecordDetailModal {
                     if is_key {
                         spans.push(Span::styled(
                             string_content,
-                            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
                         ));
                     } else {
                         spans.push(Span::styled(
@@ -455,8 +468,8 @@ impl Screen for RecordDetailModal {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(5),        // Metadata
-                Constraint::Min(5),           // Value (fills remaining)
+                Constraint::Length(5),              // Metadata
+                Constraint::Min(5),                 // Value (fills remaining)
                 Constraint::Length(headers_height), // Headers
             ])
             .split(inner);

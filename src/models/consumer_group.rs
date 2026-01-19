@@ -52,10 +52,6 @@ impl ConsumerGroupState {
 #[derive(Debug, Clone)]
 pub struct ConsumerGroupSummary {
     pub group_id: String,
-    pub state: ConsumerGroupState,
-    pub protocol_type: String,
-    pub member_count: usize,
-    pub coordinator_id: Option<i32>,
 }
 
 /// Full detail for detail view

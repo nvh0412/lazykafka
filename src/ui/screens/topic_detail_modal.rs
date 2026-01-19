@@ -72,7 +72,9 @@ impl TopicDetailModal {
             };
 
             // Update table state selection to current scroll position
-            topic_info_state.table_state.select(Some(self.scroll_offset));
+            topic_info_state
+                .table_state
+                .select(Some(self.scroll_offset));
 
             // Update scrollbar state
             topic_info_state.scroll_state = topic_info_state

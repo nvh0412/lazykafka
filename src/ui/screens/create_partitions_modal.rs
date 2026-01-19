@@ -1,10 +1,10 @@
 use crate::state::app_state::{AppMessage, AppState};
-use crate::ui::screen::{AppAction, ConfirmAction, EventResult, Screen};
+use crate::ui::screen::{AppAction, EventResult, Screen};
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
-use ratatui::Frame;
 
 pub struct CreatePartitionsModal {
     topic_name: String,
@@ -81,10 +81,7 @@ impl CreatePartitionsModal {
                             .unwrap_or_else(|| "Unknown error".to_string());
                         let _ = tx.send(AppMessage::CreatePartitionsError(error_msg));
                     } else {
-                        let _ = tx.send(AppMessage::PartitionsCreated {
-                            topic: topic_name,
-                            new_count,
-                        });
+                        let _ = tx.send(AppMessage::PartitionsCreated);
                     }
                 }
                 Err(e) => {
@@ -97,12 +94,16 @@ impl CreatePartitionsModal {
 
 impl Screen for CreatePartitionsModal {
     fn render(&mut self, frame: &mut Frame, _area: Rect, _app_state: &mut AppState) {
-        let area = self.centered_rect(50, 40, frame.area());
+        let area = self.centered_rect(40, 30, frame.area());
         frame.render_widget(Clear, area);
 
         let popup_block = Block::default()
             .title(" Add Partitions ")
-            .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
 
@@ -189,22 +190,20 @@ impl Screen for CreatePartitionsModal {
                 self.error_message = None;
                 EventResult::Handled
             }
-            KeyCode::Enter => {
-                match self.validate_input() {
-                    Ok(new_count) => {
-                        self.create_partitions(app_state, new_count);
-                        EventResult::Action(AppAction::PartitionsCreated {
-                            topic: self.topic_name.clone(),
-                            new_count,
-                        })
-                    }
-                    Err(msg) => {
-                        self.error_message = Some(msg);
-                        EventResult::Handled
-                    }
+            KeyCode::Enter => match self.validate_input() {
+                Ok(new_count) => {
+                    self.create_partitions(app_state, new_count);
+                    EventResult::Action(AppAction::PartitionsCreated {
+                        topic: self.topic_name.clone(),
+                        new_count,
+                    })
                 }
-            }
-            KeyCode::Esc => EventResult::Quit(ConfirmAction::Decline),
+                Err(msg) => {
+                    self.error_message = Some(msg);
+                    EventResult::Handled
+                }
+            },
+            KeyCode::Esc => EventResult::Pop,
             _ => EventResult::Handled,
         }
     }

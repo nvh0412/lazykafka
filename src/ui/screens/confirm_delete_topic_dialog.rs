@@ -1,5 +1,5 @@
 use crate::state::app_state::{AppMessage, AppState};
-use crate::ui::screen::{AppAction, ConfirmAction, EventResult, Screen};
+use crate::ui::screen::{AppAction, EventResult, Screen};
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -92,7 +92,7 @@ impl Screen for ConfirmDeleteTopicDialogModal {
                 self.delete_topics(app_state);
                 EventResult::Action(AppAction::DeletedTopic(self.topic_name.clone()))
             }
-            KeyCode::Char('n') | KeyCode::Char('N') => EventResult::Quit(ConfirmAction::Decline),
+            KeyCode::Char('n') | KeyCode::Char('N') => EventResult::Pop,
             _ => EventResult::Handled,
         }
     }

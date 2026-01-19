@@ -1,19 +1,19 @@
 use clap::Parser;
+use ratatui::crossterm::event::poll;
 use ratatui::{
-    Terminal,
     crossterm::{
         event::{self, DisableMouseCapture, EnableMouseCapture, Event},
         execute,
-        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
     prelude::{Backend, CrosstermBackend},
+    Terminal,
 };
 use std::{
     io::{self, Result},
     sync::Arc,
     time::Duration,
 };
-use ratatui::crossterm::event::poll;
 use tokio::sync::RwLock;
 
 use crate::{app::App, cli::Args, client_builder::ClientBuilder};
@@ -72,12 +72,12 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
     loop {
         terminal.draw(|f| app.screen_manager.render(f, &mut app.state))?;
         app.handle_messages();
-        if poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                let mut result = app.screen_manager.handle_key(key.code, &mut app.state);
-                if !app.handle_event_result(&mut result) {
-                    return Ok(false);
-                }
+        if poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            let mut result = app.screen_manager.handle_key(key.code, &mut app.state);
+            if !app.handle_event_result(&mut result) {
+                return Ok(false);
             }
         }
     }

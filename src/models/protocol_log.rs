@@ -93,60 +93,46 @@ pub enum LogStatus {
 /// A single protocol log entry
 #[derive(Debug, Clone)]
 pub struct ProtocolLogEntry {
-    pub id: u64,
     pub timestamp: SystemTime,
     pub direction: LogDirection,
     pub api_type: ApiType,
     pub api_version: i16,
-    pub correlation_id: i32,
-    pub broker: String,
     pub bytes: usize,
     pub duration: Option<Duration>,
     pub status: LogStatus,
-    pub error_message: Option<String>,
     pub summary: String,
 }
 
 impl ProtocolLogEntry {
     /// Create a new request log entry
     pub fn new_request(
-        id: u64,
         api_type: ApiType,
         api_version: i16,
-        correlation_id: i32,
-        broker: String,
         bytes: usize,
         summary: String,
     ) -> Self {
         Self {
-            id,
             timestamp: SystemTime::now(),
             direction: LogDirection::Request,
             api_type,
             api_version,
-            correlation_id,
-            broker,
             bytes,
             duration: None,
             status: LogStatus::Pending,
-            error_message: None,
             summary,
         }
     }
 
-    /// Create a new response log entry
+    #[allow(clippy::too_many_arguments)]
     pub fn new_response(
-        id: u64,
         api_type: ApiType,
         api_version: i16,
-        correlation_id: i32,
-        broker: String,
         bytes: usize,
         duration: Duration,
         error_code: Option<i16>,
         summary: String,
     ) -> Self {
-        let (status, error_message) = if let Some(code) = error_code {
+        let (status, _error_message) = if let Some(code) = error_code {
             if code != 0 {
                 (LogStatus::Error, Some(format!("Error code: {}", code)))
             } else {
@@ -157,23 +143,18 @@ impl ProtocolLogEntry {
         };
 
         Self {
-            id,
             timestamp: SystemTime::now(),
             direction: LogDirection::Response,
             api_type,
             api_version,
-            correlation_id,
-            broker,
             bytes,
             duration: Some(duration),
             status,
-            error_message,
             summary,
         }
     }
 }
 
-/// Filter for protocol logs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ProtocolLogFilter {
     #[default]
@@ -185,7 +166,6 @@ pub enum ProtocolLogFilter {
 }
 
 impl ProtocolLogFilter {
-    /// Get the next filter in the cycle
     pub fn next(&self) -> Self {
         match self {
             ProtocolLogFilter::All => ProtocolLogFilter::Fetch,
@@ -196,18 +176,6 @@ impl ProtocolLogFilter {
         }
     }
 
-    /// Get display name for the filter
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            ProtocolLogFilter::All => "All",
-            ProtocolLogFilter::Fetch => "Fetch",
-            ProtocolLogFilter::Metadata => "Metadata",
-            ProtocolLogFilter::Groups => "Groups",
-            ProtocolLogFilter::Errors => "Errors",
-        }
-    }
-
-    /// Check if an entry matches this filter
     pub fn matches(&self, entry: &ProtocolLogEntry) -> bool {
         match self {
             ProtocolLogFilter::All => true,

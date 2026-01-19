@@ -3,16 +3,18 @@ use crate::models::topic::Topic;
 use crate::repository::message_repository::RecordFetchOptions;
 use crate::state::app_state::{AppMessage, AppState, ConsumerGroupListState, TopicListState};
 use crate::state::records_state::RecordsLoadingState;
-use crate::ui::panels::{FocusTarget, GroupDetailPanel, LogsPanel, MainPanelType, PanelResult, RecordsPanel};
-use crate::ui::screen::{AppAction, EventResult, Screen};
+use crate::ui::panels::{
+    FocusTarget, GroupDetailPanel, LogsPanel, MainPanelType, PanelResult, RecordsPanel,
+};
+use crate::ui::screen::{EventResult, Screen};
 use crate::ui::screen_type::ScreenType;
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
 use ratatui::widgets::{
     Block, BorderType, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation,
 };
-use ratatui::Frame;
 use std::time::Duration;
 
 pub enum InputMode {
@@ -77,7 +79,7 @@ impl MainScreen {
             ])
             .split(body[0]);
 
-        let broker_box = Paragraph::new(format!("{}", app_state.broker_stats.broker))
+        let broker_box = Paragraph::new(app_state.broker_stats.broker.to_string())
             .block(
                 Block::default()
                     .title("Broker")
@@ -107,12 +109,10 @@ impl MainScreen {
     }
 
     fn render_main_panel(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState) {
-        let chunks = Layout::default().direction(Direction::Vertical).constraints(
-            [
-                Constraint::Min(0),
-                Constraint::Percentage(20)
-            ]
-        ).split(area);
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Percentage(20)])
+            .split(area);
 
         self.logs_panel.is_focused = matches!(self.input_mode, InputMode::LogsFocused);
         self.logs_panel.render(frame, chunks[1], app_state);
@@ -121,7 +121,8 @@ impl MainScreen {
 
         match &self.current_panel {
             MainPanelType::Records => {
-                self.records_panel.render(frame, chunks[0], app_state, is_focused);
+                self.records_panel
+                    .render(frame, chunks[0], app_state, is_focused);
             }
             MainPanelType::GroupDetail(_) => {
                 if let Some(panel) = &mut self.group_detail_panel {
@@ -160,6 +161,16 @@ impl MainScreen {
         topic_state: &mut TopicListState,
         search_query: &str,
     ) {
+        if topic_state.topics.items.is_empty() {
+            let line = Line::from(vec![Span::raw("No topics found")]);
+            let list = List::new(vec![ListItem::new(line)])
+                .block(Block::default().title("Topics").borders(Borders::ALL))
+                .highlight_style(Style::default());
+
+            frame.render_widget(list, area);
+            return;
+        }
+
         // Split the area into search box (3 lines) and topic list
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -250,6 +261,21 @@ impl MainScreen {
             InputMode::SelectGroup => Style::default().fg(Color::LightGreen),
             _ => Style::default().fg(Color::White),
         };
+
+        if state.groups.items.is_empty() {
+            let line = Line::from(vec![Span::raw("No groups found")]);
+            let list = List::new(vec![ListItem::new(line)])
+                .block(
+                    Block::default()
+                        .title("Groups")
+                        .borders(Borders::ALL)
+                        .border_style(list_style),
+                )
+                .highlight_style(Style::default());
+
+            frame.render_widget(list, area);
+            return;
+        }
 
         // Filter topics based on search query
         let filtered_items: Vec<ListItem> = state
@@ -356,7 +382,10 @@ impl MainScreen {
             (InputMode::SelectTopic, InputMode::SelectGroup) => {
                 // Switching from Topics to Groups
                 app_state.filtered_topic_state.topics.unselect();
-                app_state.filtered_consumer_groups_state.groups.select_first();
+                app_state
+                    .filtered_consumer_groups_state
+                    .groups
+                    .select_first();
             }
             (InputMode::SelectGroup, InputMode::SelectTopic) => {
                 // Switching from Groups to Topics
@@ -371,7 +400,10 @@ impl MainScreen {
             (InputMode::PanelFocused, InputMode::SelectGroup) => {
                 // Returning to Groups from panel
                 app_state.filtered_topic_state.topics.unselect();
-                app_state.filtered_consumer_groups_state.groups.select_first();
+                app_state
+                    .filtered_consumer_groups_state
+                    .groups
+                    .select_first();
             }
             _ => {}
         }
@@ -428,7 +460,9 @@ impl MainScreen {
     fn load_messages_for_topic(&self, topic: Topic, app_state: &mut AppState) {
         // Set up the records state with the topic info
         let partitions: Vec<i32> = topic.partitions.iter().map(|p| p.partition).collect();
-        app_state.records_state.set_topic(topic.name.clone(), partitions);
+        app_state
+            .records_state
+            .set_topic(topic.name.clone(), partitions);
 
         // Use paginated loading
         self.load_records_paginated(topic, app_state, None);
@@ -551,8 +585,12 @@ impl MainScreen {
                 newest_first: true,
             };
 
-            app_state.records_state.pagination.current_page =
-                app_state.records_state.pagination.current_page.saturating_sub(1).max(1);
+            app_state.records_state.pagination.current_page = app_state
+                .records_state
+                .pagination
+                .current_page
+                .saturating_sub(1)
+                .max(1);
             self.load_records_paginated(topic.clone(), app_state, Some(options));
         }
     }
@@ -595,14 +633,18 @@ impl MainScreen {
                 Ok(groups) => {
                     let _ = tx.send(AppMessage::ConsumerGroupsLoaded(groups));
                 }
-                Err(e) => {
-                    let _ = tx.send(AppMessage::ConsumerGroupError(e.to_string()));
+                Err(_e) => {
+                    let _ = tx.send(AppMessage::ConsumerGroupError);
                 }
             }
         });
     }
 
-    fn handle_panel_result(&mut self, result: PanelResult, app_state: &mut AppState) -> EventResult {
+    fn handle_panel_result(
+        &mut self,
+        result: PanelResult,
+        app_state: &mut AppState,
+    ) -> EventResult {
         match result {
             PanelResult::Handled => EventResult::Handled,
             PanelResult::SwitchFocus(target) => {
@@ -629,8 +671,8 @@ impl Screen for MainScreen {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),        // Body + Logs
-                Constraint::Length(1),     // Footer
+                Constraint::Min(0),    // Body + Logs
+                Constraint::Length(1), // Footer
             ])
             .split(frame.area());
 
@@ -648,7 +690,7 @@ impl Screen for MainScreen {
     fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> EventResult {
         match self.input_mode {
             InputMode::SelectTopic => match key {
-                KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
+                KeyCode::Char('q') => EventResult::Quit,
                 KeyCode::Char('l') => {
                     self.input_mode = InputMode::LogsFocused;
                     EventResult::Handled
@@ -745,7 +787,7 @@ impl Screen for MainScreen {
             InputMode::PanelFocused => {
                 // First check for quit command
                 if matches!(key, KeyCode::Char('q')) {
-                    return EventResult::Action(AppAction::ConfirmExitApp);
+                    return EventResult::Quit;
                 }
 
                 // Check for logs panel focus
@@ -754,7 +796,6 @@ impl Screen for MainScreen {
                     return EventResult::Handled;
                 }
 
-                // Handle records panel specific keys that need main_screen access
                 if matches!(self.current_panel, MainPanelType::Records) {
                     match key {
                         KeyCode::Char('n') => {
@@ -773,12 +814,11 @@ impl Screen for MainScreen {
                     }
                 }
 
-                // Dispatch to current panel
                 let result = match &self.current_panel {
                     MainPanelType::Records => {
                         app_state.filtered_topic_state.topics.on_focused();
                         self.records_panel.handle_key(key, app_state)
-                    },
+                    }
                     MainPanelType::GroupDetail(_) => {
                         if let Some(panel) = &mut self.group_detail_panel {
                             panel.handle_key(key, app_state)
@@ -791,7 +831,7 @@ impl Screen for MainScreen {
                 self.handle_panel_result(result, app_state)
             }
             InputMode::SelectGroup => match key {
-                KeyCode::Char('q') => EventResult::Action(AppAction::ConfirmExitApp),
+                KeyCode::Char('q') => EventResult::Quit,
                 KeyCode::Char('l') => {
                     self.input_mode = InputMode::LogsFocused;
                     EventResult::Handled
@@ -813,8 +853,7 @@ impl Screen for MainScreen {
                     EventResult::Handled
                 }
                 KeyCode::Enter => {
-                    if let Some(group) =
-                        app_state.filtered_consumer_groups_state.groups.selected()
+                    if let Some(group) = app_state.filtered_consumer_groups_state.groups.selected()
                     {
                         let group_id = group.group_id.clone();
                         self.switch_panel(MainPanelType::GroupDetail(group_id));
@@ -824,15 +863,12 @@ impl Screen for MainScreen {
                 _ => EventResult::Handled,
             },
             InputMode::LogsFocused => {
-                // Check for quit command
                 if matches!(key, KeyCode::Char('q')) {
-                    return EventResult::Action(AppAction::ConfirmExitApp);
+                    return EventResult::Quit;
                 }
 
-                // Dispatch to logs panel
                 let result = self.logs_panel.handle_key(key, app_state);
 
-                // If logs panel returned that it's no longer focused, switch back
                 if !self.logs_panel.is_focused {
                     self.input_mode = InputMode::SelectTopic;
                 }

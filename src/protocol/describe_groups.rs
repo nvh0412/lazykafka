@@ -54,14 +54,12 @@ impl ProtocolRequest for DescribeGroupsRequest {
 /// DescribeGroups Response
 pub struct DescribeGroupsResponse {
     pub correlation_id: i32,
-    pub throttle_time_ms: i32,
     pub groups: Vec<DescribedGroup>,
 }
 
 /// Detailed information about a consumer group
 #[derive(Debug, Clone)]
 pub struct DescribedGroup {
-    pub error_code: i16,
     pub group_id: String,
     pub group_state: String,
     pub protocol_type: String,
@@ -75,7 +73,6 @@ pub struct GroupMember {
     pub member_id: String,
     pub client_id: String,
     pub client_host: String,
-    pub member_metadata: Vec<u8>,
     pub member_assignment: Vec<u8>,
 }
 
@@ -84,13 +81,13 @@ impl ProtocolResponse<DescribeGroupsResponse> for DescribeGroupsResponse {
         let mut decoder = MessageDecoder::new(data);
 
         let correlation_id = decoder.read_i32()?;
-        let throttle_time_ms = decoder.read_i32()?;
+        let _throttle_time_ms = decoder.read_i32()?;
 
         let group_count = decoder.read_i32()? as usize;
         let mut groups = Vec::with_capacity(group_count);
 
         for _ in 0..group_count {
-            let error_code = decoder.read_i16()?;
+            let _error_code = decoder.read_i16()?;
             let group_id = decoder.read_string()?;
             let group_state = decoder.read_string()?;
             let protocol_type = decoder.read_string()?;
@@ -103,22 +100,20 @@ impl ProtocolResponse<DescribeGroupsResponse> for DescribeGroupsResponse {
                 let member_id = decoder.read_string()?;
                 let client_id = decoder.read_string()?;
                 let client_host = decoder.read_string()?;
-                let member_metadata = decoder.read_bytes()?.unwrap_or_default();
+                let _member_metadata = decoder.read_bytes()?.unwrap_or_default();
                 let member_assignment = decoder.read_bytes()?.unwrap_or_default();
 
                 members.push(GroupMember {
                     member_id,
                     client_id,
                     client_host,
-                    member_metadata,
                     member_assignment,
                 });
             }
 
-            let authorized_operations = decoder.read_i32()?;
+            let _authorized_operations = decoder.read_i32()?;
 
             groups.push(DescribedGroup {
-                error_code,
                 group_id,
                 group_state,
                 protocol_type,
@@ -129,7 +124,6 @@ impl ProtocolResponse<DescribeGroupsResponse> for DescribeGroupsResponse {
 
         Ok(Self {
             correlation_id,
-            throttle_time_ms,
             groups,
         })
     }

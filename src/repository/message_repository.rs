@@ -3,33 +3,25 @@ use crate::error;
 use crate::models::topic::Topic;
 use crate::protocol::fetch::{FetchPartition, FetchTopic};
 use crate::protocol::list_offset::{
-    ListOffsetPartition, ListOffsetPartitionResponse, ListOffsetTopic,
+    ListOffsetPartition, ListOffsetTopic,
 };
 use crate::protocol::record::Record;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Special timestamp value to get the earliest available offset
 pub const OFFSET_EARLIEST: i64 = -2;
-/// Special timestamp value to get the latest (end) offset
 pub const OFFSET_LATEST: i64 = -1;
 
-/// Configuration for paginated record fetching
 pub const DEFAULT_PAGE_SIZE: usize = 100;
 pub const MAX_PAGE_SIZE: usize = 1000;
 pub const PARTITION_MAX_BYTES: i32 = 1_048_576; // 1MB per partition
 
-/// Options for fetching records with pagination
 #[derive(Clone, Debug)]
 pub struct RecordFetchOptions {
-    /// Number of records per page
     pub page_size: usize,
-    /// Starting offset for each partition (None = use latest offsets)
     pub start_offsets: Option<HashMap<i32, i64>>,
-    /// Filter to specific partitions (None = all partitions)
     pub partition_filter: Option<Vec<i32>>,
-    /// Whether to fetch from newest first (true) or oldest first (false)
     pub newest_first: bool,
 }
 
@@ -47,21 +39,13 @@ impl Default for RecordFetchOptions {
 /// Result of a paginated fetch operation
 #[derive(Clone, Debug)]
 pub struct RecordFetchResult {
-    /// The fetched records for this page
     pub records: Vec<Record>,
-    /// Starting offsets used for this fetch (per partition)
     pub start_offsets: HashMap<i32, i64>,
-    /// Ending offsets after this fetch (for next page navigation)
     pub end_offsets: HashMap<i32, i64>,
-    /// Earliest available offsets per partition
     pub earliest_offsets: HashMap<i32, i64>,
-    /// Latest available offsets per partition
     pub latest_offsets: HashMap<i32, i64>,
-    /// Total estimated record count (sum of latest - earliest for all partitions)
     pub total_estimated: usize,
-    /// Whether there are more records available (has next page)
     pub has_more: bool,
-    /// Whether there are previous records available (has previous page)
     pub has_previous: bool,
 }
 
@@ -75,65 +59,6 @@ impl MessageRepository {
         Self { kafka_client }
     }
 
-    pub async fn fetch_by_topic(&self, topic: Topic) -> error::Result<Vec<Record>> {
-        let mut client = self.kafka_client.write().await;
-        let partitions: Vec<ListOffsetPartition> = topic
-            .partitions
-            .iter()
-            .map(|p| ListOffsetPartition {
-                partition_index: p.partition,
-                timestamp: 0,
-            })
-            .collect();
-
-        let offset_topics = vec![ListOffsetTopic {
-            name: topic.name.clone(),
-            partitions,
-        }];
-
-        let mut topic_map: HashMap<String, Vec<ListOffsetPartitionResponse>> = HashMap::new();
-
-        let results = client.list_offsets(offset_topics).await?;
-
-        for t in results.topics {
-            topic_map.insert(t.name, t.partitions);
-        }
-
-        let mut topics: Vec<FetchTopic> = Vec::new();
-
-        topic_map.iter().for_each(|(topic, offsets)| {
-            let mut fetch_topic_request = FetchTopic::new(topic.clone());
-
-            offsets.iter().for_each(|offset| {
-                fetch_topic_request.add_partition(FetchPartition {
-                    partition: offset.partition_index,
-                    fetch_offset: offset.offset,
-                    partition_max_bytes: 1_048_576,
-                });
-            });
-
-            topics.push(fetch_topic_request);
-        });
-
-        let mut records = Vec::new();
-        let response = client.fetch_messages(topics).await?;
-
-        for topic_r in response.responses {
-            for p in topic_r.paritions {
-                for batch in p.records {
-                    for r in batch.records {
-                        let mut record = r.clone();
-                        record.partition = Some(p.partition_index);
-                        records.push(record);
-                    }
-                }
-            }
-        }
-
-        Ok(records)
-    }
-
-    /// Fetch records from a topic with pagination support
     pub async fn fetch_by_topic_paginated(
         &self,
         topic: Topic,
@@ -245,7 +170,6 @@ impl MessageRepository {
                 start_offsets.insert(p.partition, start);
             }
         } else {
-            // Start from earliest
             for p in &partitions_to_fetch {
                 let earliest = earliest_offsets.get(&p.partition).copied().unwrap_or(0);
                 start_offsets.insert(p.partition, earliest);

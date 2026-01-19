@@ -10,7 +10,7 @@ pub enum EventResult {
     Push(ScreenType),
     Pop,
     Replace(ScreenType),
-    Quit(ConfirmAction),
+    Quit,
     Action(AppAction),
 }
 
@@ -25,13 +25,9 @@ pub trait Screen: Send {
     }
 }
 
+#[allow(dead_code)]
 pub enum AppAction {
     ClosePopup,
-    ConfirmExitApp,
     DeletedTopic(String),
     PartitionsCreated { topic: String, new_count: i32 },
-}
-pub enum ConfirmAction {
-    Accept,
-    Decline,
 }

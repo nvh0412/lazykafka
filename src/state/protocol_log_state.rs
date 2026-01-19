@@ -50,7 +50,7 @@ impl ProtocolLogState {
         bytes: usize,
         summary: String,
     ) {
-        let id = self.next_id;
+        let _id = self.next_id;
         self.next_id += 1;
 
         // Store pending request info
@@ -60,11 +60,8 @@ impl ProtocolLogState {
         );
 
         let entry = ProtocolLogEntry::new_request(
-            id,
             api_type,
             api_version,
-            correlation_id,
-            broker,
             bytes,
             summary,
         );
@@ -80,19 +77,16 @@ impl ProtocolLogState {
         error_code: Option<i16>,
         summary: String,
     ) {
-        let id = self.next_id;
+        let _id = self.next_id;
         self.next_id += 1;
 
         // Look up the pending request
-        if let Some((request_time, api_type, api_version, broker)) = self.pending_requests.remove(&correlation_id) {
+        if let Some((request_time, api_type, api_version, _broker)) = self.pending_requests.remove(&correlation_id) {
             let duration = request_time.elapsed().unwrap_or_default();
 
             let entry = ProtocolLogEntry::new_response(
-                id,
                 api_type,
                 api_version,
-                correlation_id,
-                broker,
                 bytes,
                 duration,
                 error_code,
@@ -124,11 +118,6 @@ impl ProtocolLogState {
             .iter()
             .filter(|e| self.filter.matches(e))
             .collect()
-    }
-
-    /// Get the total number of entries (unfiltered)
-    pub fn total_count(&self) -> usize {
-        self.entries.len()
     }
 
     /// Get the number of filtered entries
@@ -182,35 +171,5 @@ impl ProtocolLogState {
     pub fn scroll_to_bottom(&mut self) {
         // Will be adjusted when rendering based on visible height
         self.scroll_offset = usize::MAX;
-    }
-
-    /// Select next entry
-    pub fn select_next(&mut self) {
-        let count = self.filtered_count();
-        if count == 0 {
-            self.selected_index = None;
-            return;
-        }
-
-        self.selected_index = match self.selected_index {
-            None => Some(0),
-            Some(i) if i < count - 1 => Some(i + 1),
-            Some(i) => Some(i),
-        };
-    }
-
-    /// Select previous entry
-    pub fn select_previous(&mut self) {
-        let count = self.filtered_count();
-        if count == 0 {
-            self.selected_index = None;
-            return;
-        }
-
-        self.selected_index = match self.selected_index {
-            None => Some(count.saturating_sub(1)),
-            Some(0) => Some(0),
-            Some(i) => Some(i - 1),
-        };
     }
 }

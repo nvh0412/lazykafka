@@ -52,10 +52,6 @@ impl ConsumerGroupRepository {
             .iter()
             .map(|g| ConsumerGroupSummary {
                 group_id: g.group_id.clone(),
-                state: ConsumerGroupState::from(g.group_state.as_str()),
-                protocol_type: g.protocol_type.clone(),
-                member_count: g.members.len(),
-                coordinator_id: None,
             })
             .collect();
 
@@ -80,13 +76,9 @@ impl ConsumerGroupRepository {
 
         // 2. Describe group
         let describe_response = client.describe_groups(vec![group_id.clone()]).await?;
-        let described_group = describe_response
-            .groups
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                crate::error::KafkaError::ProtocolError("Group not found".to_string())
-            })?;
+        let described_group = describe_response.groups.into_iter().next().ok_or_else(|| {
+            crate::error::KafkaError::ProtocolError("Group not found".to_string())
+        })?;
 
         // 3. Parse members and assignments
         let members: Vec<ConsumerGroupMember> = described_group

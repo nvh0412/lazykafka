@@ -2,11 +2,11 @@ use crate::models::consumer_group::ConsumerGroupDetail;
 use crate::state::app_state::{AppMessage, AppState, ConsumerGroupTab};
 use crate::ui::screen::AppAction::ClosePopup;
 use crate::ui::screen::{EventResult, Screen};
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, Tabs};
-use ratatui::Frame;
 
 pub struct ConsumerGroupDetailModal {
     group_id: String,
@@ -27,8 +27,8 @@ impl ConsumerGroupDetailModal {
                 Ok(detail) => {
                     let _ = tx.send(AppMessage::ConsumerGroupDetailLoaded(detail));
                 }
-                Err(e) => {
-                    let _ = tx.send(AppMessage::ConsumerGroupError(e.to_string()));
+                Err(_e) => {
+                    let _ = tx.send(AppMessage::ConsumerGroupError);
                 }
             }
         });
@@ -76,11 +76,10 @@ impl ConsumerGroupDetailModal {
         // Tabs
         let tab_titles = vec!["Overview", "Members", "Offsets/Lag"];
         let tabs = Tabs::new(tab_titles)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(format!("Consumer Group: {} (Esc to close)", detail.group_id)),
-            )
+            .block(Block::default().borders(Borders::ALL).title(format!(
+                "Consumer Group: {} (Esc to close)",
+                detail.group_id
+            )))
             .select(match app_state.consumer_group_detail_state.active_tab {
                 ConsumerGroupTab::Overview => 0,
                 ConsumerGroupTab::Members => 1,
@@ -100,9 +99,7 @@ impl ConsumerGroupDetailModal {
         // Tab content
         match app_state.consumer_group_detail_state.active_tab {
             ConsumerGroupTab::Overview => self.render_overview(frame, chunks[2], detail),
-            ConsumerGroupTab::Members => {
-                self.render_members(frame, chunks[2], detail, app_state)
-            }
+            ConsumerGroupTab::Members => self.render_members(frame, chunks[2], detail, app_state),
             ConsumerGroupTab::Offsets => self.render_offsets(frame, chunks[2], detail, app_state),
         }
     }
@@ -128,7 +125,10 @@ impl ConsumerGroupDetailModal {
 
         // Right: Coordinator
         let coordinator_info = if let Some(coord) = &detail.coordinator {
-            format!("Node: {}\nHost: {}:{}", coord.node_id, coord.host, coord.port)
+            format!(
+                "Node: {}\nHost: {}:{}",
+                coord.node_id, coord.host, coord.port
+            )
         } else {
             "Unknown".to_string()
         };
@@ -264,7 +264,11 @@ impl ConsumerGroupDetailModal {
             ],
         )
         .header(header)
-        .block(Block::default().borders(Borders::ALL).title("Offsets & Lag"))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Offsets & Lag"),
+        )
         .row_highlight_style(Style::default().bg(Color::DarkGray));
 
         frame.render_stateful_widget(

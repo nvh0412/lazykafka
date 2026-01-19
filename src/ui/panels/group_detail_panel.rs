@@ -20,10 +20,6 @@ impl GroupDetailPanel {
         }
     }
 
-    pub fn group_id(&self) -> &str {
-        &self.group_id
-    }
-
     pub fn load_detail(&mut self, app_state: &mut AppState) {
         let tx = app_state.tx.clone();
         let repo = app_state.repository_manager.consumer_groups().clone();
@@ -38,8 +34,8 @@ impl GroupDetailPanel {
                 Ok(detail) => {
                     let _ = tx.send(AppMessage::ConsumerGroupDetailLoaded(detail));
                 }
-                Err(e) => {
-                    let _ = tx.send(AppMessage::ConsumerGroupError(e.to_string()));
+                Err(_e) => {
+                    let _ = tx.send(AppMessage::ConsumerGroupError);
                 }
             }
         });
@@ -47,7 +43,13 @@ impl GroupDetailPanel {
         self.loaded = true;
     }
 
-    pub fn render(&mut self, frame: &mut Frame, area: Rect, app_state: &mut AppState, focused: bool) {
+    pub fn render(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        app_state: &mut AppState,
+        focused: bool,
+    ) {
         // Load data on first render if needed
         if !self.loaded {
             self.load_detail(app_state);
@@ -57,12 +59,11 @@ impl GroupDetailPanel {
             Some(d) if d.group_id == self.group_id => d.clone(),
             _ => {
                 // Loading state
-                let loading = Paragraph::new("Loading consumer group details...")
-                    .block(
-                        Block::default()
-                            .title(format!("Consumer Group: {}", self.group_id))
-                            .borders(Borders::ALL),
-                    );
+                let loading = Paragraph::new("Loading consumer group details...").block(
+                    Block::default()
+                        .title(format!("Consumer Group: {}", self.group_id))
+                        .borders(Borders::ALL),
+                );
                 frame.render_widget(loading, area);
                 return;
             }
@@ -149,7 +150,10 @@ impl GroupDetailPanel {
 
         // Right: Coordinator
         let coordinator_info = if let Some(coord) = &detail.coordinator {
-            format!("Node: {}\nHost: {}:{}", coord.node_id, coord.host, coord.port)
+            format!(
+                "Node: {}\nHost: {}:{}",
+                coord.node_id, coord.host, coord.port
+            )
         } else {
             "Unknown".to_string()
         };
@@ -285,7 +289,11 @@ impl GroupDetailPanel {
             ],
         )
         .header(header)
-        .block(Block::default().borders(Borders::ALL).title("Offsets & Lag"))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Offsets & Lag"),
+        )
         .row_highlight_style(Style::default().bg(Color::DarkGray));
 
         frame.render_stateful_widget(

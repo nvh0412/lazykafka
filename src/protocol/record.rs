@@ -25,31 +25,6 @@ pub struct Header {
 }
 
 impl Record {
-    pub fn ref_array(&self) -> [String; 5] {
-        let key_str = self
-            .key
-            .as_ref()
-            .and_then(|k| String::from_utf8(k.clone()).ok())
-            .unwrap_or_else(|| String::from("null"));
-
-        let value_str =
-            String::from_utf8(self.value.clone()).unwrap_or_else(|_| String::from("null"));
-        let partition_str = self
-            .partition
-            .map(|p| p.to_string())
-            .unwrap_or_else(|| String::from("null"));
-
-        [
-            key_str,
-            partition_str,
-            self.timestamp_delta.to_string(),
-            self.offset_delta.to_string(),
-            value_str,
-        ]
-    }
-
-    /// Decode record from batch format (length already read as prefix)
-    /// In Kafka Record Batch Format v2, records use zigzag encoding for lengths
     pub fn decode_from_batch(decoder: &mut MessageDecoder, length: i64) -> Result<Self> {
         let attributes = decoder.read_i8()?;
 
@@ -115,8 +90,6 @@ impl Record {
         })
     }
 
-    /// Decode record in standalone format (with length field prefix)
-    /// This is used for testing and standalone record parsing
     pub fn decode_from_decoder(decoder: &mut MessageDecoder) -> Result<Self> {
         let length = decoder.read_varint()?;
         Self::decode_from_batch(decoder, length)
@@ -132,7 +105,6 @@ impl ProtocolResponse<Record> for Record {
 }
 
 impl Header {
-    /// Decode header from batch format using zigzag encoding
     fn decode_from_batch(decoder: &mut MessageDecoder) -> Result<Header> {
         // Header key_length uses signed varint (zigzag encoding)
         let header_key_length = decoder.read_varint_zigzag()?;
@@ -158,7 +130,6 @@ impl Header {
         Ok(Header { key, value })
     }
 
-    /// Decode header in standalone format (for testing)
     fn decode_from_decoder(decoder: &mut MessageDecoder) -> Result<Header> {
         let header_key_length = decoder.read_varint()?;
         let key = String::from_utf8(

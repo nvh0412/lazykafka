@@ -16,7 +16,6 @@ pub mod record;
 pub mod record_batch;
 pub mod request_header;
 pub mod create_partitions;
-mod create_topics;
 
 pub trait ProtocolRequest {
     fn encode(&self) -> Vec<u8>;

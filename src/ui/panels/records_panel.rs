@@ -3,11 +3,11 @@ use crate::state::records_state::RecordsLoadingState;
 use crate::ui::panels::{FocusTarget, PanelResult};
 use crate::ui::screen_type::ScreenType;
 use chrono::Utc;
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
-use ratatui::Frame;
 
 /// Input mode for the records panel
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -61,15 +61,15 @@ impl RecordsPanel {
         let diff_secs = (now - timestamp_ms) / 1000;
 
         if diff_secs < 0 {
-            return "future".to_string();
+            "future".to_string()
         } else if diff_secs < 60 {
-            return format!("{}s ago", diff_secs);
+            format!("{}s ago", diff_secs)
         } else if diff_secs < 3600 {
-            return format!("{}m ago", diff_secs / 60);
+            format!("{}m ago", diff_secs / 60)
         } else if diff_secs < 86400 {
-            return format!("{}h ago", diff_secs / 3600);
+            format!("{}h ago", diff_secs / 3600)
         } else {
-            return format!("{}d ago", diff_secs / 86400);
+            format!("{}d ago", diff_secs / 86400)
         }
     }
 
@@ -106,20 +106,11 @@ impl RecordsPanel {
         self.render_footer(frame, chunks[2], app_state);
     }
 
-    fn render_toolbar(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        app_state: &AppState,
-        _focused: bool,
-    ) {
+    fn render_toolbar(&self, frame: &mut Frame, area: Rect, app_state: &AppState, _focused: bool) {
         let records_state = &app_state.records_state;
 
         // Build toolbar content
-        let topic_name = records_state
-            .topic_name
-            .as_deref()
-            .unwrap_or("No topic");
+        let topic_name = records_state.topic_name.as_deref().unwrap_or("No topic");
 
         let sort_mode = records_state.sort_mode.display_name();
         let current_page = records_state.pagination.current_page;
@@ -142,7 +133,10 @@ impl RecordsPanel {
         let search_indicator = if self.input_mode == RecordInputMode::Searching {
             format!(" Search: [{}|]", &self.search_input)
         } else if !records_state.filter.search_query.is_empty() {
-            format!(" Search: [{}] (x) Clear", &records_state.filter.search_query)
+            format!(
+                " Search: [{}] (x) Clear",
+                &records_state.filter.search_query
+            )
         } else {
             " Search: (/) Enter search".to_string()
         };
@@ -194,8 +188,8 @@ impl RecordsPanel {
             let partition_color = Self::partition_color(partition);
 
             // Partition cell with color badge
-            let partition_cell = Cell::from(format!("[P{}]", partition))
-                .style(Style::default().fg(partition_color));
+            let partition_cell =
+                Cell::from(format!("[P{}]", partition)).style(Style::default().fg(partition_color));
 
             // Key cell
             let key_str = record
@@ -203,7 +197,7 @@ impl RecordsPanel {
                 .as_ref()
                 .and_then(|k| String::from_utf8(k.clone()).ok())
                 .unwrap_or_else(|| "<null>".to_string());
-            let key_cell = Cell::from(Self::truncate_str(&key_str, 20));
+            let key_cell = Cell::from(Self::truncate_str(&key_str, 40));
 
             // Timestamp cell - use base_timestamp if available, otherwise just show delta
             // TODO: Get base_timestamp from record batch when available
@@ -214,10 +208,9 @@ impl RecordsPanel {
             let offset_cell = Cell::from(format!("{}", record.offset_delta));
 
             // Value preview cell
-            let value_str = String::from_utf8(record.value.clone())
-                .unwrap_or_else(|_| "<binary>".to_string());
-            let value_preview = Self::truncate_str(&value_str, 50);
-            let value_cell = Cell::from(value_preview);
+            let value_str =
+                String::from_utf8(record.value.clone()).unwrap_or_else(|_| "<binary>".to_string());
+            let value_cell = Cell::from(value_str);
 
             Row::new(vec![
                 partition_cell,
@@ -263,7 +256,7 @@ impl RecordsPanel {
             rows,
             [
                 Constraint::Length(6),  // Partition
-                Constraint::Length(22), // Key
+                Constraint::Length(40), // Key
                 Constraint::Length(12), // Timestamp
                 Constraint::Length(10), // Offset
                 Constraint::Min(0),     // Value
@@ -286,10 +279,18 @@ impl RecordsPanel {
 
         // Build footer status line
         let loading_indicator = match &records_state.loading_state {
-            RecordsLoadingState::Loading => Span::styled("● Loading", Style::default().fg(Color::Yellow)),
-            RecordsLoadingState::Loaded => Span::styled("● Ready", Style::default().fg(Color::Green)),
-            RecordsLoadingState::Error(_) => Span::styled("● Error", Style::default().fg(Color::Red)),
-            RecordsLoadingState::Idle => Span::styled("○ Idle", Style::default().fg(Color::DarkGray)),
+            RecordsLoadingState::Loading => {
+                Span::styled("● Loading", Style::default().fg(Color::Yellow))
+            }
+            RecordsLoadingState::Loaded => {
+                Span::styled("● Ready", Style::default().fg(Color::Green))
+            }
+            RecordsLoadingState::Error(_) => {
+                Span::styled("● Error", Style::default().fg(Color::Red))
+            }
+            RecordsLoadingState::Idle => {
+                Span::styled("○ Idle", Style::default().fg(Color::DarkGray))
+            }
         };
 
         let matched_info = format!(
@@ -298,7 +299,8 @@ impl RecordsPanel {
             records_state.total_count()
         );
 
-        let nav_hint = if records_state.pagination.has_previous || records_state.pagination.has_more {
+        let nav_hint = if records_state.pagination.has_previous || records_state.pagination.has_more
+        {
             " | [n]ext [p]rev"
         } else {
             ""
@@ -320,7 +322,9 @@ impl RecordsPanel {
     pub fn handle_key(&mut self, key: KeyCode, app_state: &mut AppState) -> PanelResult {
         match self.input_mode {
             RecordInputMode::Searching => self.handle_search_key(key, app_state),
-            RecordInputMode::FilteringPartitions => self.handle_partition_filter_key(key, app_state),
+            RecordInputMode::FilteringPartitions => {
+                self.handle_partition_filter_key(key, app_state)
+            }
             RecordInputMode::Normal => self.handle_normal_key(key, app_state),
         }
     }
@@ -402,27 +406,37 @@ impl RecordsPanel {
             }
             KeyCode::Enter => {
                 // Apply search
-                app_state.records_state.set_search_query(self.search_input.clone());
+                app_state
+                    .records_state
+                    .set_search_query(self.search_input.clone());
                 self.input_mode = RecordInputMode::Normal;
                 PanelResult::Handled
             }
             KeyCode::Backspace => {
                 self.search_input.pop();
                 // Live search as user types
-                app_state.records_state.set_search_query(self.search_input.clone());
+                app_state
+                    .records_state
+                    .set_search_query(self.search_input.clone());
                 PanelResult::Handled
             }
             KeyCode::Char(c) => {
                 self.search_input.push(c);
                 // Live search as user types
-                app_state.records_state.set_search_query(self.search_input.clone());
+                app_state
+                    .records_state
+                    .set_search_query(self.search_input.clone());
                 PanelResult::Handled
             }
             _ => PanelResult::Handled,
         }
     }
 
-    fn handle_partition_filter_key(&mut self, key: KeyCode, app_state: &mut AppState) -> PanelResult {
+    fn handle_partition_filter_key(
+        &mut self,
+        key: KeyCode,
+        app_state: &mut AppState,
+    ) -> PanelResult {
         match key {
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('f') => {
                 self.input_mode = RecordInputMode::Normal;
@@ -443,7 +457,12 @@ impl RecordsPanel {
             KeyCode::Char(c) if c.is_ascii_digit() => {
                 // Toggle partition by number
                 let partition = c.to_digit(10).unwrap() as i32;
-                if app_state.records_state.filter.available_partitions.contains(&partition) {
+                if app_state
+                    .records_state
+                    .filter
+                    .available_partitions
+                    .contains(&partition)
+                {
                     app_state.records_state.toggle_partition(partition);
                 }
                 PanelResult::Handled
@@ -453,12 +472,8 @@ impl RecordsPanel {
     }
 
     fn sync_table_state(&mut self, app_state: &AppState) {
-        self.table_state.select(Some(app_state.records_state.selected_index));
-    }
-
-    /// Get the current input mode
-    pub fn input_mode(&self) -> RecordInputMode {
-        self.input_mode
+        self.table_state
+            .select(Some(app_state.records_state.selected_index));
     }
 
     /// Check if currently in search mode

@@ -1,5 +1,5 @@
 use crate::state::app_state::AppState;
-use crate::ui::screen::{ConfirmAction, EventResult, Screen};
+use crate::ui::screen::{EventResult, Screen};
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -59,8 +59,8 @@ impl Screen for ConfirmDialogModal {
 
     fn handle_key(&mut self, key: KeyCode, _app_state: &mut AppState) -> EventResult {
         match key {
-            KeyCode::Char('y') | KeyCode::Char('Y') => EventResult::Quit(ConfirmAction::Accept),
-            KeyCode::Char('n') | KeyCode::Char('N') => EventResult::Quit(ConfirmAction::Decline),
+            KeyCode::Char('y') | KeyCode::Char('Y') => EventResult::Handled,
+            KeyCode::Char('n') | KeyCode::Char('N') => EventResult::Pop,
             _ => EventResult::Handled,
         }
     }

@@ -90,19 +90,19 @@ impl KafkaConnection {
 
     /// Log a request if logging is enabled
     fn log_request(&self, request: &[u8]) {
-        if let Some(tx) = &self.log_tx {
-            if let Some((api_key, api_version, correlation_id)) = self.parse_request_header(request) {
-                let api_type = ApiType::from_api_key(api_key);
-                let summary = self.generate_request_summary(api_type);
-                let _ = tx.send(ProtocolLogMessage::Request {
-                    api_type,
-                    api_version,
-                    correlation_id,
-                    broker: self.broker_address.clone(),
-                    bytes: request.len(),
-                    summary,
-                });
-            }
+        if let Some(tx) = &self.log_tx
+            && let Some((api_key, api_version, correlation_id)) = self.parse_request_header(request)
+        {
+            let api_type = ApiType::from_api_key(api_key);
+            let summary = self.generate_request_summary(api_type);
+            let _ = tx.send(ProtocolLogMessage::Request {
+                api_type,
+                api_version,
+                correlation_id,
+                broker: self.broker_address.clone(),
+                bytes: request.len(),
+                summary,
+            });
         }
     }
 
@@ -141,7 +141,7 @@ impl KafkaConnection {
 
                 Ok(())
             }
-            Err(e) => {
+            Err(_e) => {
                 self.state = ConnectionState::Failed;
                 Err(KafkaError::ConnectionFailed(self.broker_address.clone()))
             }
@@ -354,7 +354,8 @@ impl KafkaConnection {
 
                 // Log the response (correlation_id is the first 4 bytes)
                 if response.len() >= 4 {
-                    let correlation_id = i32::from_be_bytes([response[0], response[1], response[2], response[3]]);
+                    let correlation_id =
+                        i32::from_be_bytes([response[0], response[1], response[2], response[3]]);
                     // For error code, we'd need to know the API type - for now pass None
                     self.log_response(correlation_id, &response, None);
                 }

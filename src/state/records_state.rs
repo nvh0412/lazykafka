@@ -71,7 +71,7 @@ impl PaginationState {
         if self.page_size == 0 {
             return 0;
         }
-        ((self.total_estimated + self.page_size - 1) / self.page_size).max(1)
+        self.total_estimated.div_ceil(self.page_size)
     }
 
     /// Update pagination state from fetch result
@@ -187,7 +187,6 @@ impl RecordsState {
         }
     }
 
-    /// Set the current topic and reset state
     pub fn set_topic(&mut self, topic_name: String, partitions: Vec<i32>) {
         self.topic_name = Some(topic_name);
         self.records.clear();
@@ -201,7 +200,6 @@ impl RecordsState {
         self.loading_state = RecordsLoadingState::Loading;
     }
 
-    /// Update records from a fetch result
     pub fn update_from_result(&mut self, result: RecordFetchResult) {
         self.pagination.update_from_result(&result);
         self.records = result.records;
@@ -209,12 +207,10 @@ impl RecordsState {
         self.apply_filters_and_sort();
     }
 
-    /// Set error state
     pub fn set_error(&mut self, error: String) {
         self.loading_state = RecordsLoadingState::Error(error);
     }
 
-    /// Apply filters and sorting to produce display_records
     pub fn apply_filters_and_sort(&mut self) {
         // Start with all records
         let mut filtered: Vec<Record> = self.records.clone();
@@ -282,91 +278,61 @@ impl RecordsState {
         }
     }
 
-    /// Cycle to the next sort mode
     pub fn cycle_sort_mode(&mut self) {
         self.sort_mode = self.sort_mode.next();
         self.apply_filters_and_sort();
     }
 
-    /// Set search query and re-filter
     pub fn set_search_query(&mut self, query: String) {
         self.filter.search_query = query;
         self.apply_filters_and_sort();
     }
 
-    /// Clear search query
     pub fn clear_search(&mut self) {
         self.filter.search_query.clear();
         self.apply_filters_and_sort();
     }
 
-    /// Toggle a partition filter
     pub fn toggle_partition(&mut self, partition: i32) {
         self.filter.toggle_partition(partition);
         self.apply_filters_and_sort();
     }
 
-    /// Get the currently selected record
     pub fn selected_record(&self) -> Option<&Record> {
         self.display_records.get(self.selected_index)
     }
 
-    /// Move selection up
     pub fn select_previous(&mut self) {
         if self.selected_index > 0 {
             self.selected_index -= 1;
         }
     }
 
-    /// Move selection down
     pub fn select_next(&mut self) {
         if self.selected_index < self.display_records.len().saturating_sub(1) {
             self.selected_index += 1;
         }
     }
 
-    /// Jump to first record
     pub fn select_first(&mut self) {
         self.selected_index = 0;
     }
 
-    /// Jump to last record
     pub fn select_last(&mut self) {
         if !self.display_records.is_empty() {
             self.selected_index = self.display_records.len() - 1;
         }
     }
 
-    /// Get count of displayed (filtered) records
     pub fn display_count(&self) -> usize {
         self.display_records.len()
     }
 
-    /// Get total count of loaded records
     pub fn total_count(&self) -> usize {
         self.records.len()
     }
 
-    /// Check if currently loading
     pub fn is_loading(&self) -> bool {
         matches!(self.loading_state, RecordsLoadingState::Loading)
-    }
-
-    /// Get status text for footer
-    pub fn status_text(&self) -> String {
-        match &self.loading_state {
-            RecordsLoadingState::Idle => "Ready".to_string(),
-            RecordsLoadingState::Loading => "Loading...".to_string(),
-            RecordsLoadingState::Loaded => {
-                let filtered = self.display_count();
-                let total = self.total_count();
-                if filtered == total {
-                    format!("{} records", total)
-                } else {
-                    format!("{}/{} matched", filtered, total)
-                }
-            }
-            RecordsLoadingState::Error(e) => format!("Error: {}", e),
-        }
     }
 }

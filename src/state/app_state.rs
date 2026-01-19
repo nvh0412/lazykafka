@@ -3,7 +3,6 @@ use crate::components::stateful_list::StatefulList;
 use crate::error::KafkaError;
 use crate::models::broker_stats::{BrokerStats, ConnectionStatus};
 use crate::models::consumer_group::{ConsumerGroupDetail, ConsumerGroupSummary};
-use crate::models::protocol_log::ProtocolLogMessage;
 use crate::models::topic::{Topic, TopicConfig};
 use crate::protocol::record::Record;
 use crate::repository::message_repository::RecordFetchResult;
@@ -13,7 +12,7 @@ use crate::state::protocol_log_state::ProtocolLogState;
 use crate::state::records_state::RecordsState;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 
 pub struct TopicListState {
     pub topics: StatefulList<Topic>,
@@ -31,7 +30,6 @@ pub struct ConsumerGroupListState {
     pub items: Vec<ConsumerGroupSummary>,
     pub groups: StatefulList<ConsumerGroupSummary>,
     pub vertical_scroll_state: ScrollbarState,
-    pub vertical_scroll: usize,
 }
 
 impl Default for ConsumerGroupListState {
@@ -40,7 +38,6 @@ impl Default for ConsumerGroupListState {
             items: vec![],
             groups: StatefulList::with_items(vec![]),
             vertical_scroll_state: ScrollbarState::default(),
-            vertical_scroll: 0,
         }
     }
 }
@@ -74,21 +71,16 @@ pub enum ConsumerGroupTab {
 pub enum AppMessage {
     TopicsLoaded(Vec<Topic>),
     StatsUpdated(BrokerStats),
-    MessagesLoaded(Vec<Record>),
     TopicConfigLoaded(String, TopicConfig),
     TopicDeleted(String),
     Error(String),
     // Consumer group messages
     ConsumerGroupsLoaded(Vec<ConsumerGroupSummary>),
     ConsumerGroupDetailLoaded(ConsumerGroupDetail),
-    ConsumerGroupError(String),
-    // Partition messages
-    PartitionsCreated { topic: String, new_count: i32 },
+    ConsumerGroupError,
+    PartitionsCreated,
     CreatePartitionsError(String),
-    // Protocol log messages
-    ProtocolLog(ProtocolLogMessage),
     // Records panel messages (new paginated loading)
-    RecordsLoadingStarted { topic_name: String },
     RecordsPageLoaded(RecordFetchResult),
     RecordsLoadingError(String),
 }
@@ -99,7 +91,6 @@ pub struct AppState {
     pub filtered_topic_state: TopicListState,
     pub topic_info_state: TopicInfoState,
     pub records: StatefulList<Record>,
-    // New records state with pagination, sorting, filtering
     pub records_state: RecordsState,
     pub filter: FilterState,
     pub broker_stats: BrokerStats,
@@ -109,12 +100,10 @@ pub struct AppState {
     pub rx: mpsc::UnboundedReceiver<AppMessage>,
     pub tx: mpsc::UnboundedSender<AppMessage>,
     pub repository_manager: RepositoryManager,
-    // Consumer group state
     pub consumer_groups: StatefulList<ConsumerGroupSummary>,
     pub filtered_consumer_groups_state: ConsumerGroupListState,
     pub consumer_group_detail_state: ConsumerGroupDetailState,
     pub consumer_group_search_query: String,
-    // Protocol log state
     pub protocol_log_state: ProtocolLogState,
 }
 
@@ -149,12 +138,10 @@ impl AppState {
             tx,
             rx,
             repository_manager,
-            // Consumer group state
             consumer_groups: StatefulList::with_items(vec![]),
             filtered_consumer_groups_state: ConsumerGroupListState::default(),
             consumer_group_detail_state: ConsumerGroupDetailState::default(),
             consumer_group_search_query: String::new(),
-            // Protocol log state
             protocol_log_state: ProtocolLogState::default(),
         }
     }
