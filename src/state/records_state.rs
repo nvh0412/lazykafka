@@ -165,6 +165,8 @@ pub struct RecordsState {
     pub loading_state: RecordsLoadingState,
     /// Selected row index in the table
     pub selected_index: usize,
+    /// Warnings from the last fetch (skipped or undecodable batches)
+    pub warnings: Vec<String>,
 }
 
 impl Default for RecordsState {
@@ -184,6 +186,7 @@ impl RecordsState {
             filter: RecordFilterState::new(),
             loading_state: RecordsLoadingState::Idle,
             selected_index: 0,
+            warnings: Vec::new(),
         }
     }
 
@@ -197,12 +200,14 @@ impl RecordsState {
             ..Default::default()
         };
         self.selected_index = 0;
+        self.warnings.clear();
         self.loading_state = RecordsLoadingState::Loading;
     }
 
     pub fn update_from_result(&mut self, result: RecordFetchResult) {
         self.pagination.update_from_result(&result);
         self.records = result.records;
+        self.warnings = result.warnings;
         self.loading_state = RecordsLoadingState::Loaded;
         self.apply_filters_and_sort();
     }
@@ -249,22 +254,24 @@ impl RecordsState {
         // Apply sorting
         match self.sort_mode {
             RecordSortMode::NewestFirst => {
-                filtered.sort_by(|a, b| b.timestamp_delta.cmp(&a.timestamp_delta));
+                filtered
+                    .sort_by(|a, b| b.timestamp.cmp(&a.timestamp).then(b.offset.cmp(&a.offset)));
             }
             RecordSortMode::OldestFirst => {
-                filtered.sort_by(|a, b| a.timestamp_delta.cmp(&b.timestamp_delta));
+                filtered
+                    .sort_by(|a, b| a.timestamp.cmp(&b.timestamp).then(a.offset.cmp(&b.offset)));
             }
             RecordSortMode::OffsetAsc => {
                 filtered.sort_by(|a, b| {
-                    let a_offset = a.partition.unwrap_or(0) as i64 * 1_000_000_000 + a.offset_delta;
-                    let b_offset = b.partition.unwrap_or(0) as i64 * 1_000_000_000 + b.offset_delta;
+                    let a_offset = a.partition.unwrap_or(0) as i64 * 1_000_000_000 + a.offset;
+                    let b_offset = b.partition.unwrap_or(0) as i64 * 1_000_000_000 + b.offset;
                     a_offset.cmp(&b_offset)
                 });
             }
             RecordSortMode::OffsetDesc => {
                 filtered.sort_by(|a, b| {
-                    let a_offset = a.partition.unwrap_or(0) as i64 * 1_000_000_000 + a.offset_delta;
-                    let b_offset = b.partition.unwrap_or(0) as i64 * 1_000_000_000 + b.offset_delta;
+                    let a_offset = a.partition.unwrap_or(0) as i64 * 1_000_000_000 + a.offset;
+                    let b_offset = b.partition.unwrap_or(0) as i64 * 1_000_000_000 + b.offset;
                     b_offset.cmp(&a_offset)
                 });
             }

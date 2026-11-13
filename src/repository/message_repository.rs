@@ -45,6 +45,8 @@ pub struct RecordFetchResult {
     pub total_estimated: usize,
     pub has_more: bool,
     pub has_previous: bool,
+    /// Problems worth showing the user (skipped or undecodable batches).
+    pub warnings: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -85,6 +87,7 @@ impl MessageRepository {
                 total_estimated: 0,
                 has_more: false,
                 has_previous: false,
+                warnings: vec![],
             });
         }
 
@@ -188,6 +191,7 @@ impl MessageRepository {
         // Fetch records
         let mut records = Vec::new();
         let mut end_offsets: HashMap<i32, i64> = HashMap::new();
+        let mut warnings: Vec<String> = Vec::new();
         let response = client.fetch_messages(vec![fetch_topic]).await?;
 
         for topic_r in response.responses {
@@ -195,8 +199,35 @@ impl MessageRepository {
                 let partition_idx = p.partition_index;
                 let mut partition_records: Vec<Record> = Vec::new();
 
+                let start = start_offsets.get(&partition_idx).copied().unwrap_or(0);
+                // Next offset after everything we received, including batches we had to skip
+                let mut next_offset = start;
+
+                warnings.extend(
+                    p.warnings
+                        .iter()
+                        .map(|w| format!("partition {}: {}", partition_idx, w)),
+                );
+
                 for batch in p.records {
+                    if let Some(reason) = &batch.skip_reason {
+                        warnings.push(format!(
+                            "partition {}: batch at offset {} skipped: {}",
+                            partition_idx, batch.base_offset, reason
+                        ));
+                    }
+                    let batch_end = batch
+                        .base_offset
+                        .saturating_add(batch.last_offset_delta as i64)
+                        .saturating_add(1);
+                    next_offset = next_offset.max(batch_end);
+
                     for r in batch.records {
+                        // The broker returns the whole batch containing the fetch offset,
+                        // so drop records that precede the requested start.
+                        if r.offset < start {
+                            continue;
+                        }
                         let mut record = r.clone();
                         record.partition = Some(partition_idx);
                         partition_records.push(record);
@@ -205,14 +236,9 @@ impl MessageRepository {
 
                 // Track the end offset for this partition
                 if let Some(last_record) = partition_records.last() {
-                    let start = start_offsets.get(&partition_idx).copied().unwrap_or(0);
-                    end_offsets.insert(partition_idx, start + last_record.offset_delta + 1);
-                } else {
-                    end_offsets.insert(
-                        partition_idx,
-                        start_offsets.get(&partition_idx).copied().unwrap_or(0),
-                    );
+                    next_offset = next_offset.max(last_record.offset + 1);
                 }
+                end_offsets.insert(partition_idx, next_offset);
 
                 records.extend(partition_records);
             }
@@ -245,6 +271,7 @@ impl MessageRepository {
             total_estimated,
             has_more,
             has_previous,
+            warnings,
         })
     }
 }

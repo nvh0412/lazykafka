@@ -123,6 +123,8 @@ pub struct FetchPartitionResponse {
     pub last_stable_offset: i64,
     pub aborted_transactions: Vec<AbortedTransaction>,
     pub records: Vec<RecordBatch>,
+    /// Human-readable problems hit while decoding this partition's batches.
+    pub warnings: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -178,6 +180,7 @@ impl FetchResponse {
                 // Decode all RecordBatches from the records bytes
                 let records_bytes = decoder.read_bytes()?.unwrap_or(vec![]);
                 let mut record_batches = Vec::new();
+                let mut warnings: Vec<String> = Vec::new();
 
                 if !records_bytes.is_empty() {
                     let mut batch_decoder = MessageDecoder::new(&records_bytes);
@@ -194,6 +197,21 @@ impl FetchResponse {
 
                         // Try to decode a batch
                         let remaining_data = &records_bytes[start_pos..];
+
+                        // A truncated trailing batch is normal: the broker cuts responses at
+                        // max_bytes. Stop quietly; any other failure below is a real problem.
+                        let declared_len = i32::from_be_bytes([
+                            remaining_data[8],
+                            remaining_data[9],
+                            remaining_data[10],
+                            remaining_data[11],
+                        ]);
+                        if usize::try_from(declared_len)
+                            .map(|len| remaining_data.len() < 12 + len)
+                            .unwrap_or(false)
+                        {
+                            break;
+                        }
                         match RecordBatch::decode(remaining_data) {
                             Ok(batch) => {
                                 // Calculate how many bytes this batch consumed
@@ -205,8 +223,8 @@ impl FetchResponse {
 
                                 record_batches.push(batch);
                             }
-                            Err(_) => {
-                                // If we can't decode a batch, stop trying
+                            Err(e) => {
+                                warnings.push(format!("record batch could not be decoded: {}", e));
                                 break;
                             }
                         }
@@ -220,6 +238,7 @@ impl FetchResponse {
                     last_stable_offset,
                     aborted_transactions,
                     records: record_batches,
+                    warnings,
                 })
             }
 

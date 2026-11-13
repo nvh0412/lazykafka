@@ -274,7 +274,7 @@ impl RecordDetailModal {
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(self.record.offset_delta.to_string()),
+                Span::raw(self.record.offset.to_string()),
             ]),
             Line::from(vec![
                 Span::styled(
@@ -309,7 +309,7 @@ impl RecordDetailModal {
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(self.record.timestamp_delta.to_string()),
+                Span::raw(self.record.timestamp.to_string()),
             ]),
             Line::from(vec![
                 Span::styled(

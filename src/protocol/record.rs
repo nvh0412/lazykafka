@@ -9,8 +9,12 @@ pub struct Record {
     pub length: i64, // varint
     pub attributes: i8,
     pub timestamp_delta: i64, // varint
-    pub offset_delta: i64,    // varint
-    pub key_length: i64,      // varint
+    pub offset_delta: i64,    // varint (zigzag)
+    /// Absolute offset (batch base_offset + offset_delta). Filled in by `RecordBatch`.
+    pub offset: i64,
+    /// Absolute timestamp in ms (batch first_timestamp + timestamp_delta). Filled in by `RecordBatch`.
+    pub timestamp: i64,
+    pub key_length: i64, // varint
     pub key: Option<Vec<u8>>,
     pub value: Vec<u8>,
     pub headers: Vec<Header>,
@@ -31,8 +35,8 @@ impl Record {
         // timestamp_delta uses signed varint (zigzag encoding)
         let timestamp_delta = decoder.read_varint_zigzag()?;
 
-        // offset_delta uses unsigned varint
-        let offset_delta = decoder.read_varint()?;
+        // offset_delta is a signed varint (zigzag), like timestamp_delta
+        let offset_delta = decoder.read_varint_zigzag()?;
 
         // In batch format v2, key_length uses signed varint (zigzag)
         // Negative value means null
@@ -82,6 +86,8 @@ impl Record {
             attributes,
             timestamp_delta,
             offset_delta,
+            offset: offset_delta,
+            timestamp: timestamp_delta,
             key_length,
             key,
             value,
@@ -389,7 +395,7 @@ mod record_tests {
             0x80, 0x01, // length (varint: 128)
             0x00, // attributes
             0x00, // timestamp_delta (zigzag: 0)
-            0x80, 0x02, // offset_delta (varint: 256)
+            0x80, 0x04, // offset_delta (zigzag varint: 256)
             0x01, // key_length (zigzag: 1 = -1, null)
             0x01, // value_length (zigzag: 1 = -1, null)
             0x00, // headers_count (zigzag: 0)
@@ -451,7 +457,7 @@ mod record_tests {
             0x50, // length
             0x08, // attributes (some flags set)
             0x04, // timestamp_delta (zigzag: 4 = 2)
-            0x05, // offset_delta (varint: 5)
+            0x0A, // offset_delta (zigzag varint: 5)
             // key
             0x06, // key_length (zigzag: 6 = 3 bytes)
             b'm', b's', b'g', // key: "msg"

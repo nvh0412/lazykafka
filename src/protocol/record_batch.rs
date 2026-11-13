@@ -102,7 +102,10 @@ impl RecordBatch {
             };
 
             match payload {
-                Ok(payload) => records = Self::decode_records(&payload, record_count)?,
+                Ok(payload) => {
+                    records =
+                        Self::decode_records(&payload, record_count, base_offset, first_timestamp)?
+                }
                 Err(e) => {
                     skip_reason = Some(format!(
                         "{} batch could not be decompressed: {}",
@@ -131,7 +134,12 @@ impl RecordBatch {
         })
     }
 
-    fn decode_records(payload: &[u8], record_count: usize) -> Result<Vec<Record>> {
+    fn decode_records(
+        payload: &[u8],
+        record_count: usize,
+        base_offset: i64,
+        first_timestamp: i64,
+    ) -> Result<Vec<Record>> {
         let mut decoder = MessageDecoder::new(payload);
         // Every record takes at least one byte, so remaining() bounds a sane capacity.
         let mut records = Vec::with_capacity(record_count.min(decoder.remaining()));
@@ -146,7 +154,9 @@ impl RecordBatch {
             // Bounds-checked slice of exactly this record's bytes (advances the decoder).
             let record_bytes = decoder.read_slice(len)?;
             let mut record_decoder = MessageDecoder::new(record_bytes);
-            let record = Record::decode_from_batch(&mut record_decoder, record_length)?;
+            let mut record = Record::decode_from_batch(&mut record_decoder, record_length)?;
+            record.offset = base_offset.saturating_add(record.offset_delta);
+            record.timestamp = first_timestamp.saturating_add(record.timestamp_delta);
             records.push(record);
         }
 
@@ -548,6 +558,27 @@ mod record_batch_tests {
         assert_eq!(batch.records[0].value, b"first value".to_vec());
         assert_eq!(batch.records[1].key, Some(b"k2".to_vec()));
         assert_eq!(batch.records[1].value, b"second value".to_vec());
+    }
+
+    #[test]
+    fn test_record_batch_absolute_offset_and_timestamp() {
+        // base_offset = 100, first_timestamp = 5000; records carry deltas 0 and 1 (zigzag 0, 2)
+        let mut blob = Vec::new();
+        for (ts_delta_zz, off_delta_zz) in [(0u8, 0u8), (6u8, 2u8)] {
+            let body = vec![0x00, ts_delta_zz, off_delta_zz, 0x00, 0x00, 0x00];
+            blob.push((body.len() as u8) << 1);
+            blob.extend(body);
+        }
+        let mut data = build_batch(0, 2, &blob);
+        data[0..8].copy_from_slice(&100i64.to_be_bytes());
+        // first_timestamp sits after: base_offset(8)+len(4)+epoch(4)+magic(1)+crc(4)+attrs(2)+lod(4)
+        data[27..35].copy_from_slice(&5000i64.to_be_bytes());
+
+        let batch = RecordBatch::decode(&data).unwrap();
+        assert_eq!(batch.records[0].offset, 100);
+        assert_eq!(batch.records[1].offset, 101);
+        assert_eq!(batch.records[0].timestamp, 5000);
+        assert_eq!(batch.records[1].timestamp, 5003);
     }
 
     fn all_codec_batches() -> Vec<(&'static str, Vec<u8>)> {

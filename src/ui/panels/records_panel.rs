@@ -50,11 +50,10 @@ impl RecordsPanel {
         PARTITION_COLORS[(partition as usize) % PARTITION_COLORS.len()]
     }
 
-    /// Format a timestamp delta as relative time
-    fn format_relative_time(timestamp_delta: i64, base_timestamp: i64) -> String {
-        let timestamp_ms = base_timestamp + timestamp_delta;
+    /// Format an absolute timestamp (ms since epoch) as relative time
+    fn format_relative_time(timestamp_ms: i64) -> String {
         if timestamp_ms <= 0 {
-            return format!("{}", timestamp_delta);
+            return format!("{}", timestamp_ms);
         }
 
         let now = Utc::now().timestamp_millis();
@@ -199,13 +198,11 @@ impl RecordsPanel {
                 .unwrap_or_else(|| "<null>".to_string());
             let key_cell = Cell::from(Self::truncate_str(&key_str, 40));
 
-            // Timestamp cell - use base_timestamp if available, otherwise just show delta
-            // TODO: Get base_timestamp from record batch when available
-            let timestamp_str = Self::format_relative_time(record.timestamp_delta, 0);
+            let timestamp_str = Self::format_relative_time(record.timestamp);
             let timestamp_cell = Cell::from(timestamp_str);
 
             // Offset cell
-            let offset_cell = Cell::from(format!("{}", record.offset_delta));
+            let offset_cell = Cell::from(format!("{}", record.offset));
 
             // Value preview cell
             let value_str =
@@ -244,12 +241,20 @@ impl RecordsPanel {
             .add_modifier(Modifier::BOLD);
 
         // Show loading or empty state
-        let title = if records_state.is_loading() {
-            " Records (Loading...) "
+        let base_title = if records_state.is_loading() {
+            "Records (Loading...)"
         } else if records_state.display_records.is_empty() {
-            " Records (Empty) "
+            "Records (Empty)"
         } else {
-            " Records "
+            "Records"
+        };
+        // Surface skipped/undecodable batches instead of silently showing nothing
+        let title = match records_state.warnings.as_slice() {
+            [] => format!(" {} ", base_title),
+            [only] => format!(" {} ⚠ {} ", base_title, only),
+            [first, rest @ ..] => {
+                format!(" {} ⚠ {} (+{} more) ", base_title, first, rest.len())
+            }
         };
 
         let table = Table::new(
