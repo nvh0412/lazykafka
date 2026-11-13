@@ -75,6 +75,28 @@ Keep an eye on your connection and cluster stats.
 
 ## Installation
 
+### Homebrew (macOS and Linux)
+
+```bash
+brew install nvh0412/tap/lazykafka
+```
+
+Or tap it first, then install by name:
+
+```bash
+brew tap nvh0412/tap
+brew install lazykafka
+```
+
+### Debian / Ubuntu (.deb)
+
+Download the `.deb` for your architecture (`amd64` or `arm64`) from the
+[releases page](https://github.com/nvh0412/lazykafka/releases), then:
+
+```bash
+sudo apt install ./lazykafka_<version>-1_amd64.deb
+```
+
 ### From releases
 
 Download the executable file compatible with your OS from the releases page here.
@@ -100,12 +122,6 @@ Download the .exe file and add it to your PATH.
 git clone https://github.com/nvh0412/lazykafka
 cd lazykafka
 cargo build --release
-```
-
-### Homebrew (coming soon)
-
-```bash
-brew install lazykafka
 ```
 
 ## Usage
