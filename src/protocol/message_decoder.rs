@@ -219,6 +219,25 @@ impl<'a> MessageDecoder<'a> {
         Ok(Some(s))
     }
 
+    /// Borrow the next `len` bytes without copying, advancing the position.
+    /// Fails (without advancing) if fewer than `len` bytes remain.
+    pub fn read_slice(&mut self, len: usize) -> Result<&'a [u8]> {
+        if self.remaining() < len {
+            return Err(KafkaError::InsufficientData {
+                needed: len,
+                available: self.remaining(),
+            });
+        }
+        let slice = &self.data[self.pos..self.pos + len];
+        self.pos += len;
+        Ok(slice)
+    }
+
+    /// All bytes not yet consumed (does not advance).
+    pub fn remaining_slice(&self) -> &'a [u8] {
+        &self.data[self.pos..]
+    }
+
     pub fn read_bytes_from_length(&mut self, length: i64) -> Result<Option<Vec<u8>>> {
         if length < 0 {
             return Ok(None);
