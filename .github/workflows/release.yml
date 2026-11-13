@@ -150,6 +150,27 @@ jobs:
           mkdir -p release-artifacts
           find artifacts -type f -exec mv {} release-artifacts/ \;
 
+      - name: Install cargo-deb
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb
+
+      - name: Build .deb packages
+        run: |
+          # Package the static musl binaries built above (no rebuild needed)
+          for pair in "x86_64-unknown-linux-musl:lazykafka-linux-x86_64-musl" \
+                      "aarch64-unknown-linux-musl:lazykafka-linux-arm64-musl"; do
+            target=${pair%%:*}
+            asset=${pair##*:}
+            mkdir -p target/$target/release
+            cp release-artifacts/$asset target/$target/release/lazykafka
+            chmod +x target/$target/release/lazykafka
+            cargo deb --no-build --no-strip --target $target
+          done
+          cp target/debian/*.deb release-artifacts/
+          cd release-artifacts
+          for f in *.deb; do shasum -a 256 "$f" > "$f.sha256"; done
+
       - name: Generate release notes
         id: release_notes
         run: |
@@ -203,3 +224,63 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set; skipping Homebrew tap update"
+            exit 0
+          fi
+          VERSION=${GITHUB_REF_NAME#v}
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          sha() { cut -d' ' -f1 "release-artifacts/$1.sha256"; }
+
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/nvh0412/homebrew-tap.git" tap
+          cat << EOF > tap/Formula/lazykafka.rb
+          class Lazykafka < Formula
+            desc "Terminal UI for Apache Kafka"
+            homepage "https://github.com/${GITHUB_REPOSITORY}"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "${BASE}/lazykafka-macos-arm64"
+                sha256 "$(sha lazykafka-macos-arm64)"
+              end
+              on_intel do
+                url "${BASE}/lazykafka-macos-x86_64"
+                sha256 "$(sha lazykafka-macos-x86_64)"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "${BASE}/lazykafka-linux-arm64-musl"
+                sha256 "$(sha lazykafka-linux-arm64-musl)"
+              end
+              on_intel do
+                url "${BASE}/lazykafka-linux-x86_64-musl"
+                sha256 "$(sha lazykafka-linux-x86_64-musl)"
+              end
+            end
+
+            def install
+              # Release assets are bare binaries named per-platform
+              bin.install Dir["lazykafka-*"].first => "lazykafka"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/lazykafka --version")
+            end
+          end
+          EOF
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/lazykafka.rb
+          git commit -m "lazykafka ${VERSION}" || { echo "Formula unchanged"; exit 0; }
+          git push
